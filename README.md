@@ -108,6 +108,25 @@ mafia_bot/
 - **Guruhga qaytish tugmasi**: `https://t.me/c/...` linki faqat superguruh (supergroup)larda
   to'g'ri ishlaydi; oddiy guruh uchun Telegram username asosidagi link talab qilinadi.
 
+## 🚂 Railway'ga deploy qilish
+
+1. Repo'ni GitHub'ga yuklang, so'ng Railway'da **New Project → Deploy from GitHub repo**.
+2. Xuddi shu loyihaga **PostgreSQL** plagin/servisini qo'shing (**New → Database → PostgreSQL**).
+3. Bot servisining **Variables** bo'limiga quyidagilarni qo'shing:
+   - `BOT_TOKEN` — BotFather'dan olingan token
+   - `SUPER_ADMINS` — sizning Telegram ID'ingiz (vergul bilan bir nechtasi mumkin)
+   - `DATABASE_URL` — agar bot va Postgres bitta Railway loyihasida bo'lsa, referens sifatida
+     `${{Postgres.DATABASE_URL}}` deb yozing (Railway o'zi ichki host bilan almashtiradi — bu eng
+     tez va ishonchli usul). Agar Postgres boshqa joyda bo'lsa, uning **Public Network** URL'ini
+     to'liq nusxalab qo'ying — `postgres://` yoki `postgresql://` bo'lsa ham bot avtomatik
+     `postgresql+asyncpg://` ga o'giradi.
+4. **Settings → Deploy** bo'limida start buyrug'i avtomatik `Procfile`dagi `worker: python main.py`
+   dan olinadi. Bu bot **worker** turida ishlaydi — HTTP portga chiqish/public domain shart emas,
+   shuning uchun Railway'da "Generate Domain" qilish kerak emas.
+5. Deploy tugagach, loglarda `Baza tayyor. Bot ishga tushmoqda...` chiqsa — ulanish muvaffaqiyatli.
+   Agar ulanish xatosi chiqsa, to'liq xatolik matnini tekshiring — `db.py` endi sababini aniq
+   log qiladi (masalan noto'g'ri parol, host topilmadi, va h.k.).
+
 ## 🔑 Kutubxonalar
 
 ```

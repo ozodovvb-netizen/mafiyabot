@@ -44,8 +44,10 @@ BOT_USERNAME = os.getenv("BOT_USERNAME", "Sherif_mafiabot")
 
 # --- Bosh adminlar (bot ishga tushganda avtomatik admin huquqiga ega bo'ladi) ---
 # .env faylida: SUPER_ADMINS=123456789,987654321
+# (Railway'da qiymatni tirnoqsiz kiriting: 123456789 — "123456789" emas)
+_raw_super_admins = os.getenv("SUPER_ADMINS", "").strip().strip("'\"")
 SUPER_ADMINS = [
-    int(x) for x in os.getenv("SUPER_ADMINS", "").split(",") if x.strip().isdigit()
+    int(x) for x in re.split(r"[,;\s]+", _raw_super_admins) if x.strip().isdigit()
 ]
 
 # --- PostgreSQL ulanish satri ---

@@ -16,7 +16,8 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from config import BOT_TOKEN
+import config
+from config import BOT_TOKEN, SUPER_ADMINS
 from database.db import init_db
 
 # --- Foydalanuvchi handlerlari ---
@@ -67,6 +68,27 @@ async def main():
 
     await init_db()
     logging.info("Baza tayyor. Bot ishga tushmoqda...")
+
+    # Haqiqiy bot username'ni Telegram'dan olamiz (.env dagi BOT_USERNAME noto'g'ri/eskirgan
+    # bo'lsa ham "Guruhga qo'shish" va "O'yinga qo'shilish" tugmalari to'g'ri ishlashi uchun).
+    me = await bot.get_me()
+    if config.BOT_USERNAME != me.username:
+        logging.warning(
+            "BOT_USERNAME .env da '%s' deb yozilgan, lekin haqiqiy bot username '@%s'. "
+            "Avtomatik to'g'irlandi, lekin .env dagi BOT_USERNAME ni ham yangilab qo'yish tavsiya etiladi.",
+            config.BOT_USERNAME, me.username,
+        )
+    config.BOT_USERNAME = me.username
+    logging.info("Bot: @%s (id=%s)", me.username, me.id)
+
+    if not SUPER_ADMINS:
+        logging.warning(
+            "SUPER_ADMINS bo'sh! .env dagi SUPER_ADMINS qiymatini tekshiring "
+            "(faqat raqamli Telegram ID, tirnoqsiz, vergul bilan ajratilgan). "
+            "Bu bo'sh bo'lsa hech kim /admin panelga kira olmaydi."
+        )
+    else:
+        logging.info("SUPER_ADMINS aniqlandi: %s", SUPER_ADMINS)
 
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)

@@ -13,7 +13,8 @@ from aiogram.filters import Command
 from aiogram.types import Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from config import BOT_USERNAME, REGISTRATION_SECONDS, MIN_PLAYERS
+import config
+from config import REGISTRATION_SECONDS, MIN_PLAYERS
 from database import crud
 from game.engine import GameEngine, ACTIVE_GAMES
 
@@ -33,7 +34,7 @@ async def cmd_game(message: Message):
     builder = InlineKeyboardBuilder()
     builder.button(
         text="🎮 Qo'shilish",
-        url=f"https://t.me/{BOT_USERNAME}?start=join_{session.id}",
+        url=f"https://t.me/{config.BOT_USERNAME}?start=join_{session.id}",
     )
     text = await engine.registration_message_text()
     msg = await message.answer(text, reply_markup=builder.as_markup())
