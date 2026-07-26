@@ -52,12 +52,14 @@ class GameEngine:
         self.votes: dict[int, str] = {}            # voter_id -> "like"/"dislike"
         self.current_nominee: int | None = None
         self.lang = "uz"
+        self.mode = "classic"
         self.registration_open = True
         self.registration_message_id: int | None = None
         self.group_link: str | None = None
         self.stopped = False
         self.nomination_open = False
         self.nominations: dict[int, int] = {}  # voter_id -> nominee_id
+        self.vote_message_id: int | None = None
 
     # -------------------------------------------------------------------
     # RO'YXATDAN O'TISH
@@ -75,10 +77,16 @@ class GameEngine:
         return {p.user_id for p in self.alive_players()}
 
     async def registration_message_text(self) -> str:
-        names = "\n".join(f"{i+1}. {p.name}" for i, p in enumerate(self.players.values()))
+        import config
+        names = "\n".join(f"{i+1}. {p.name}" for i, p in enumerate(self.players.values())) or "—"
+        count = len(self.players)
+        filled = min(count, MIN_PLAYERS)
+        bar = "🟩" * filled + "⬜️" * max(0, MIN_PLAYERS - filled)
         return t(
             "group_registration_open", self.lang,
-            min_players=MIN_PLAYERS, players_list=names or "-", count=len(self.players)
+            min_players=MIN_PLAYERS, max_players=config.MAX_PLAYERS,
+            players_list=names, count=count, progress_bar=bar,
+            seconds=REGISTRATION_SECONDS, mode=self.mode,
         )
 
     async def refresh_registration_message(self):
@@ -126,7 +134,9 @@ class GameEngine:
             except Exception:
                 pass
 
-        await self.bot.send_message(self.chat_id, t("game_started", self.lang, mode="mega"))
+        await self.bot.send_message(
+            self.chat_id, t("game_started", self.lang, mode=getattr(self, "mode", "classic"))
+        )
 
         # Har bir o'yinchiga o'z rolini DM orqali yuboramiz
         for p in self.players.values():
@@ -189,20 +199,12 @@ class GameEngine:
     async def run_night_phase(self):
         self.night_actions.clear()
         night_text = t("night_started", self.lang, night_number=self.day_number)
-        try:
-            import os
-            from aiogram.types import FSInputFile
-            asset_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "night.png")
-            photo = FSInputFile(asset_path)
-            await self.bot.send_photo(self.chat_id, photo, caption=night_text)
-        except Exception:
-            await self.bot.send_message(self.chat_id, night_text)
+        await self._send_phase_media("night.mp4", "night.png", night_text)
 
         # Harakat qiluvchi rollarga DM orqali nishon tanlash so'raladi
         actionable = [
             p for p in self.alive_players()
             if p.role and p.role.night_action_type != NightActionType.none
-            and p.role.night_action_type != NightActionType.custom
         ]
         for p in actionable:
             await self._send_night_action_prompt(p)
@@ -212,6 +214,84 @@ class GameEngine:
             return
         await self._announce_night_flavor()
         await self._resolve_night_actions()
+
+    async def _send_phase_media(self, video_name: str, photo_name: str, caption: str):
+        """Video (mp4) yuborishga urinadi, bo'lmasa rasm, u ham bo'lmasa oddiy matn yuboradi."""
+        import os
+        from aiogram.types import FSInputFile
+        base = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets")
+        video_path = os.path.join(base, video_name)
+        photo_path = os.path.join(base, photo_name)
+        try:
+            if os.path.exists(video_path):
+                await self.bot.send_video(self.chat_id, FSInputFile(video_path), caption=caption)
+                return
+        except Exception:
+            pass
+        try:
+            if os.path.exists(photo_path):
+                await self.bot.send_photo(self.chat_id, FSInputFile(photo_path), caption=caption)
+                return
+        except Exception:
+            pass
+        await self.bot.send_message(self.chat_id, caption)
+
+    # Ma'lum rollar uchun (skrinshotlardagiga o'xshash) individual tungi harakat matnlari.
+    # Kalit - rol nomi (kichik harflarda). Admin panelda xohlagan nom bilan rol qo'shishi mumkinligi
+    # sababli, bu yerda topilmagan har qanday rol uchun harakat turiga qarab tasodifiy variant tanlanadi.
+    ROLE_NIGHT_FLAVOR = {
+        "don": "😏 Don o'ljasini tanladi.",
+        "mafia": "🔫 Mafiya o'z o'ljasini tanladi.",
+        "qotil": "🔪 Qotil pichog'ini charxladi...",
+        "komissar katani": "🕵🏼 Komissar katani jinoyatchilarni qidirishda davom etmoqda!",
+        "doktor": "💊 Doktor kimningdir uyiga shoshildi.",
+        "serjant": "🛡 Serjant o'z postini tark etmadi.",
+        "janob": "🎩 Janob soyada kuzatmoqda...",
+        "daydi": "🧙‍♂️ Daydi kimnikagidir shisha olish uchun ketdi!",
+        "malika": "💃 Malika kimnidir huzuriga chaqirdi.",
+        "advokat": "⚖️ Advokat ish qog'ozlarini titkilamoqda.",
+        "sehrgar": "🔮 Sehrgar kimnidir uxlatdi...",
+        "yollanma qotil": "🥷 Yollanma qotil buyurtmasini bajarishga tayyorlanmoqda.",
+        "sotqin": "🐍 Sotqin sirlarni sotmoqda...",
+        "aferist": "🃏 Aferist birovni chalg'itmoqda.",
+        "g'azabkor": "😡 G'azabkor g'azabini bosolmayapti...",
+        "jurnalist": "📰 Jurnalist yangi maqola uchun ma'lumot yig'moqda.",
+        "robin gud": "🏹 Robin Gud kimnidir himoya qilishga qaror qildi.",
+        "ayg'oqchi": "🔎 Ayg'oqchi kuzatuvda.",
+        "qaroqchi": "🗡 Qaroqchi kimningdir cho'ntagini titkilamoqda.",
+        "zombi": "🧟 Zombi kimningdir hidini oldi...",
+        "hamshira": "👩‍⚕️ Hamshira navbatchilikda.",
+        "labarant": "🧪 Labarant probirkalarni tekshirmoqda.",
+        "tulki": "🦊 Tulki iziga tushmoqda.",
+        "xakker": "💻 Xakker tarmoqqa kirmoqda...",
+    }
+    ROLE_NIGHT_FLAVOR_BY_ACTION = {
+        NightActionType.kill: [
+            "🔪 {role} o'z o'ljasini tanladi...",
+            "🔪 {role} qorong'ulikda kimnidir poylamoqda...",
+        ],
+        NightActionType.heal: [
+            "🩺 {role} kimningdir mehmoniga keldi...",
+            "🩺 {role} shifobaxsh choralar ko'rmoqda...",
+        ],
+        NightActionType.protect: [
+            "🛡 {role} qo'riqlash uchun joy oldi...",
+        ],
+        NightActionType.check: [
+            "🔍 {role} birovni tekshirmoqda...",
+            "🔍 {role} shubhalilarni kuzatmoqda...",
+        ],
+        NightActionType.block: [
+            "🌙 {role} kimningdir yo'lini to'smoqda...",
+        ],
+        NightActionType.revive: [
+            "✨ {role} qandaydir sehr bilan band...",
+        ],
+        NightActionType.custom: [
+            "🌙 {role} tunda o'z ishi bilan band edi...",
+            "🌙 {role} kimningdir oldiga bordi...",
+        ],
+    }
 
     async def _announce_night_flavor(self):
         """Kimni nishonga olganini oshkor qilmasdan, qaysi rollar harakat qilganini guruhga bildiradi."""
@@ -225,13 +305,18 @@ class GameEngine:
             if key in seen_roles:
                 continue
             seen_roles.add(key)
+
+            custom = self.ROLE_NIGHT_FLAVOR.get(actor.role.name.strip().lower())
+            if custom:
+                lines.append(custom)
+                continue
+
             action = actor.role.night_action_type
-            if action == NightActionType.kill:
-                lines.append(f"🔪 {actor.role.emoji} {actor.role.name} o'z o'ljasini tanladi...")
-            elif action in (NightActionType.heal, NightActionType.protect):
-                lines.append(f"🩺 {actor.role.emoji} {actor.role.name} kimningdir mehmoniga keldi...")
-            elif action == NightActionType.check:
-                lines.append(f"🔍 {actor.role.emoji} {actor.role.name} birovni tekshirmoqda...")
+            variants = self.ROLE_NIGHT_FLAVOR_BY_ACTION.get(action)
+            if variants:
+                template = random.choice(variants)
+                lines.append(template.format(role=f"{actor.role.emoji} {actor.role.name}"))
+
         if lines:
             await self.bot.send_message(self.chat_id, "\n".join(lines))
 
@@ -309,7 +394,9 @@ class GameEngine:
     # KUN (muhokama + nominatsiya + ovoz berish)
     # -------------------------------------------------------------------
     async def run_day_phase(self):
-        await self.bot.send_message(self.chat_id, t("day_started", self.lang, day_number=self.day_number))
+        day_text = t("day_started", self.lang, day_number=self.day_number)
+        await self._send_phase_media("day.mp4", "day.png", day_text)
+        await self.bot.send_message(self.chat_id, self._day_roster_and_teams_text())
         await asyncio.sleep(min(DAY_DISCUSSION_SECONDS, 5))  # muhokama vaqti (qisqartirilgan demo)
         if self.stopped:
             return
@@ -321,24 +408,24 @@ class GameEngine:
         if self.stopped:
             return
         if not nominee or not nominee.alive:
-            await self.bot.send_message(self.chat_id, "🤐 Bugun hech kim nomzod sifatida ko'rsatilmadi.")
             self.current_nominee = None
             return
 
         self.current_nominee = nominee.user_id
 
+        self.votes.clear()
         builder = InlineKeyboardBuilder()
-        builder.button(text="👍", callback_data=f"vote_like:{self.chat_id}")
-        builder.button(text="👎", callback_data=f"vote_dislike:{self.chat_id}")
+        builder.button(text="👍 0", callback_data=f"vote_like:{self.chat_id}")
+        builder.button(text="👎 0", callback_data=f"vote_dislike:{self.chat_id}")
         builder.adjust(2)
 
-        await self.bot.send_message(
+        vote_msg = await self.bot.send_message(
             self.chat_id,
             f"⚖️ {nominee.name} nomzod bo'ldi!\n" + t("voting_started", self.lang, seconds=VOTING_SECONDS),
             reply_markup=builder.as_markup(),
         )
+        self.vote_message_id = vote_msg.message_id
 
-        self.votes.clear()
         await asyncio.sleep(VOTING_SECONDS)
         if self.stopped:
             return
@@ -346,6 +433,7 @@ class GameEngine:
         likes = sum(1 for v in self.votes.values() if v == "like")
         dislikes = sum(1 for v in self.votes.values() if v == "dislike")
         await self.bot.send_message(self.chat_id, t("vote_result", self.lang, likes=likes, dislikes=dislikes))
+        self.vote_message_id = None
 
         if likes > dislikes:
             nominee.alive = False
@@ -357,8 +445,33 @@ class GameEngine:
 
         self.current_nominee = None
 
+    def _day_roster_and_teams_text(self) -> str:
+        alive = self.alive_players()
+        numbered = "\n".join(f"{i+1}. {p.name}" for i, p in enumerate(alive))
+
+        team_labels = {"peaceful": "Tinchlar", "mafia": "Mafiyalar", "solo": "Yakkalar"}
+        grouped: dict[str, list] = {}
+        for p in alive:
+            key = p.role.team.value if p.role else "peaceful"
+            grouped.setdefault(key, []).append(p)
+
+        team_blocks = []
+        for key in ("peaceful", "mafia", "solo"):
+            members = grouped.get(key)
+            if not members:
+                continue
+            names = ", ".join(f"{p.role.emoji} {p.name}" for p in members)
+            team_blocks.append(f"<b>{team_labels[key]} - {len(members)}:</b>\n{names}")
+
+        return (
+            f"👥 <b>O'yinchilar ro'yxati</b>\n━━━━━━━━━━━━━━\n{numbered}\n\n"
+            + "\n\n".join(team_blocks)
+            + f"\n\n📊 Jami: <b>{len(alive)}</b> ta o'yinchi\n\n"
+            + "☀️ Kunduzgi munozara vaqti. O'yinchilar o'z fikrlarini bildirishlari mumkin."
+        )
+
     async def _run_nomination_phase(self) -> PlayerState | None:
-        """Hamma tirik o'yinchi o'zi xohlagan boshqa o'yinchini nomzod qilib ko'rsatishi mumkin."""
+        """Har bir tirik o'yinchi botdagi shaxsiy chatda kimga ovoz berishini tanlaydi."""
         alive = self.alive_players()
         if len(alive) < 2:
             return None
@@ -366,27 +479,45 @@ class GameEngine:
         self.nominations.clear()
         self.nomination_open = True
 
-        builder = InlineKeyboardBuilder()
-        for p in alive:
-            builder.button(text=p.name, callback_data=f"nominate:{self.chat_id}:{p.user_id}")
-        builder.adjust(2)
+        for voter in alive:
+            builder = InlineKeyboardBuilder()
+            for target in alive:
+                if target.user_id == voter.user_id:
+                    continue
+                builder.button(text=target.name, callback_data=f"nominate:{self.chat_id}:{target.user_id}")
+            builder.adjust(2)
+            try:
+                await self.bot.send_message(
+                    voter.user_id,
+                    "🗳 Bu kunda kimga ovoz berasiz?",
+                    reply_markup=builder.as_markup(),
+                )
+            except Exception:
+                pass
 
         await self.bot.send_message(
             self.chat_id,
-            f"🗳 Kimni shubha ostiga qo'yasiz? Nomzod tanlang! ({VOTING_SECONDS} soniya)",
-            reply_markup=builder.as_markup(),
+            f"🗳 Ovoz berish boshlandi! Har bir o'yinchi botdagi shaxsiy xabarga javob bersin. "
+            f"({VOTING_SECONDS} soniya)",
         )
 
         await asyncio.sleep(VOTING_SECONDS)
         self.nomination_open = False
 
         if not self.nominations:
+            await self.bot.send_message(self.chat_id, "🤐 Hech kim ovoz bermadi. Bugun hech kim jazolanmadi.")
             return None
 
         tally: dict[int, int] = {}
         for nominee_id in self.nominations.values():
             tally[nominee_id] = tally.get(nominee_id, 0) + 1
         max_votes = max(tally.values())
+
+        if max_votes < 2 and len(tally) > 1:
+            # hamma turli odamga ovoz berdi -- kelisha olishmadi
+            await self.bot.send_message(self.chat_id, "🤷 Aholi kelisha olmadi! Ovoz berish yakunlandi.")
+            return None
+
         top_candidates = [uid for uid, c in tally.items() if c == max_votes]
         winner_id = random.choice(top_candidates)
         return self.players.get(winner_id)
@@ -406,6 +537,23 @@ class GameEngine:
             return False
         self.votes[voter_id] = choice
         return True
+
+    async def refresh_vote_counts(self):
+        """Like/dislike tugmalaridagi sonlarni jonli yangilaydi."""
+        if not self.vote_message_id:
+            return
+        likes = sum(1 for v in self.votes.values() if v == "like")
+        dislikes = sum(1 for v in self.votes.values() if v == "dislike")
+        builder = InlineKeyboardBuilder()
+        builder.button(text=f"👍 {likes}", callback_data=f"vote_like:{self.chat_id}")
+        builder.button(text=f"👎 {dislikes}", callback_data=f"vote_dislike:{self.chat_id}")
+        builder.adjust(2)
+        try:
+            await self.bot.edit_message_reply_markup(
+                chat_id=self.chat_id, message_id=self.vote_message_id, reply_markup=builder.as_markup()
+            )
+        except Exception:
+            pass
 
     # -------------------------------------------------------------------
     # OXIRGI SO'Z (endi guruhda emas — o'yinchining botdagi shaxsiy chatida yoziladi)

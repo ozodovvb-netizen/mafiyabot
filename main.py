@@ -56,8 +56,9 @@ async def _setup_bot_commands(bot: Bot):
         BotCommand(command="profile", description="👤 Profilim"),
         BotCommand(command="lang", description="🌐 Guruh tilini o'zgartirish (admin)"),
         BotCommand(command="sozlamalar", description="⚙️ Guruh sozlamalari (admin)"),
-        BotCommand(command="gsend", description="💎 Olmos hadya qilish (reply)"),
-        BotCommand(command="mgive", description="💵 Pul hadya qilish (reply)"),
+        BotCommand(command="gsend", description="💎 Olmos hadya/giveaway (reply yoki 100-10)"),
+        BotCommand(command="mgive", description="💵 Pul hadya/giveaway (reply yoki 100-10)"),
+        BotCommand(command="change", description="💎 /gsend bilan bir xil"),
         BotCommand(command="boylar", description="🏆 Eng boy o'yinchilar reytingi"),
     ]
     await bot.set_my_commands(private_commands, scope=BotCommandScopeAllPrivateChats())

@@ -10,6 +10,7 @@ import asyncio
 
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from game.engine import ACTIVE_GAMES
 from locales.texts import t
@@ -46,7 +47,29 @@ async def on_nominate(callback: CallbackQuery):
     if not ok:
         await callback.answer("❌ Ovoz berish yopilgan yoki siz tirik emassiz.", show_alert=True)
         return
-    await callback.answer("✅ Nomzod tanlandi.")
+
+    voter = engine.players.get(callback.from_user.id)
+    target = engine.players.get(nominee_id)
+    voter_name = voter.name if voter else callback.from_user.full_name
+    target_name = target.name if target else "?"
+
+    go_to_group_kb = InlineKeyboardBuilder()
+    group_url = engine.group_link or f"https://t.me/c/{str(chat_id)[4:]}"
+    go_to_group_kb.button(text="↩️ Guruhga o'tish", url=group_url)
+
+    try:
+        await callback.message.edit_text(
+            f"✅ Siz {target_name}ga ovoz berdingiz.", reply_markup=go_to_group_kb.as_markup()
+        )
+    except Exception:
+        pass
+
+    try:
+        await callback.bot.send_message(chat_id, f"🗳 {voter_name} - {target_name}ga ovoz berdi.")
+    except Exception:
+        pass
+
+    await callback.answer("✅ Ovoz qabul qilindi.")
 
 
 @router.callback_query(F.data.startswith("vote_like:"))
@@ -59,6 +82,7 @@ async def on_vote_like(callback: CallbackQuery):
     if not engine.register_vote(callback.from_user.id, "like"):
         await callback.answer("❌ Faqat tirik o'yinchilar ovoz bera oladi.", show_alert=True)
         return
+    await engine.refresh_vote_counts()
     await callback.answer("👍")
 
 
@@ -72,6 +96,7 @@ async def on_vote_dislike(callback: CallbackQuery):
     if not engine.register_vote(callback.from_user.id, "dislike"):
         await callback.answer("❌ Faqat tirik o'yinchilar ovoz bera oladi.", show_alert=True)
         return
+    await engine.refresh_vote_counts()
     await callback.answer("👎")
 
 

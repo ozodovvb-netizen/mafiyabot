@@ -427,22 +427,37 @@ TEXTS: dict[str, dict[str, str]] = {
     # --- Guruh o'yini: ro'yxatdan o'tish ---
     "group_registration_open": {
         "uz": (
+            "🎭 <b>SHERIF MAFIA</b> 🎭\n"
+            "━━━━━━━━━━━━━━\n"
             "🎮 <b>Ro'yxatdan o'tish boshlandi!</b>\n"
-            "Kamida <b>{min_players}</b> kishi kerak.\n"
+            "🎲 Rejim: <b>{mode}</b>   ⏱ {seconds} soniya\n\n"
+            "{progress_bar}\n"
+            "👥 <b>{count}/{max_players}</b> (kamida <b>{min_players}</b> kishi kerak)\n"
             "━━━━━━━━━━━━━━\n\n"
-            "👥 <b>Ro'yhatdan o'tganlar ({count}):</b>\n{players_list}"
+            "📋 <b>Ro'yhatdan o'tganlar:</b>\n{players_list}\n\n"
+            "👇 Qo'shilish uchun pastdagi tugmani bosing!"
         ),
         "ru": (
+            "🎭 <b>SHERIF MAFIA</b> 🎭\n"
+            "━━━━━━━━━━━━━━\n"
             "🎮 <b>Регистрация началась!</b>\n"
-            "Нужно минимум <b>{min_players}</b> человек.\n"
+            "🎲 Режим: <b>{mode}</b>   ⏱ {seconds} сек\n\n"
+            "{progress_bar}\n"
+            "👥 <b>{count}/{max_players}</b> (нужно минимум <b>{min_players}</b>)\n"
             "━━━━━━━━━━━━━━\n\n"
-            "👥 <b>Зарегистрированные ({count}):</b>\n{players_list}"
+            "📋 <b>Зарегистрированные:</b>\n{players_list}\n\n"
+            "👇 Нажмите кнопку ниже, чтобы присоединиться!"
         ),
         "en": (
+            "🎭 <b>SHERIF MAFIA</b> 🎭\n"
+            "━━━━━━━━━━━━━━\n"
             "🎮 <b>Registration started!</b>\n"
-            "At least <b>{min_players}</b> players needed.\n"
+            "🎲 Mode: <b>{mode}</b>   ⏱ {seconds}s\n\n"
+            "{progress_bar}\n"
+            "👥 <b>{count}/{max_players}</b> (minimum <b>{min_players}</b> needed)\n"
             "━━━━━━━━━━━━━━\n\n"
-            "👥 <b>Registered ({count}):</b>\n{players_list}"
+            "📋 <b>Registered:</b>\n{players_list}\n\n"
+            "👇 Tap the button below to join!"
         ),
     },
     "btn_join_game": {
@@ -464,35 +479,36 @@ TEXTS: dict[str, dict[str, str]] = {
 
     # --- O'yin oqimi ---
     "game_started": {
-        "uz": "🎮 O'yin boshlandi! (Rejim: {mode})", "ru": "🎮 Игра началась! (Режим: {mode})",
-        "en": "🎮 Game started! (Mode: {mode})",
+        "uz": "🎮 <b>O'yin boshlandi!</b>\n🎲 Rejim: <b>{mode}</b>\n━━━━━━━━━━━━━━\n\nOmad tilaymiz! 🍀",
+        "ru": "🎮 <b>Игра началась!</b>\n🎲 Режим: <b>{mode}</b>\n━━━━━━━━━━━━━━\n\nУдачи! 🍀",
+        "en": "🎮 <b>Game started!</b>\n🎲 Mode: <b>{mode}</b>\n━━━━━━━━━━━━━━\n\nGood luck! 🍀",
     },
     "night_started": {
-        "uz": "🌙 {night_number}-tun boshlandi. Rollar o'z vazifasini bajarishlari mumkin.",
-        "ru": "🌙 Наступила {night_number}-я ночь. Роли могут выполнять свои действия.",
-        "en": "🌙 Night {night_number} has begun. Roles may act.",
+        "uz": "🌙 <b>{night_number}-tun boshlandi</b>\n━━━━━━━━━━━━━━\nRollar o'z vazifasini bajarishlari mumkin.",
+        "ru": "🌙 <b>Наступила {night_number}-я ночь</b>\n━━━━━━━━━━━━━━\nРоли могут выполнять свои действия.",
+        "en": "🌙 <b>Night {night_number} has begun</b>\n━━━━━━━━━━━━━━\nRoles may act.",
     },
     "day_started": {
-        "uz": "🌞 {day_number}-kun boshlandi.", "ru": "🌞 Начался {day_number}-й день.",
-        "en": "🌞 Day {day_number} has begun.",
+        "uz": "☀️ <b>{day_number}-kun boshlandi</b>", "ru": "☀️ <b>Начался {day_number}-й день</b>",
+        "en": "☀️ <b>Day {day_number} has begun</b>",
     },
     "voting_started": {
-        "uz": "⚖️ Ovoz berish vaqti! ({seconds} soniya)", "ru": "⚖️ Время голосования! ({seconds} секунд)",
-        "en": "⚖️ Voting time! ({seconds} seconds)",
+        "uz": "⚖️ <b>Ovoz berish vaqti!</b> ({seconds} soniya)", "ru": "⚖️ <b>Время голосования!</b> ({seconds} секунд)",
+        "en": "⚖️ <b>Voting time!</b> ({seconds} seconds)",
     },
     "vote_recorded": {
         "uz": "{voter} - {target}ga ovoz berdi", "ru": "{voter} - проголосовал(а) за {target}",
         "en": "{voter} - voted for {target}",
     },
     "vote_result": {
-        "uz": "Ovoz berish natijalari:\n{likes} 👍 | {dislikes} 👎",
-        "ru": "Результаты голосования:\n{likes} 👍 | {dislikes} 👎",
-        "en": "Voting results:\n{likes} 👍 | {dislikes} 👎",
+        "uz": "📊 <b>Ovoz berish natijalari:</b>\n{likes} 👍 | {dislikes} 👎",
+        "ru": "📊 <b>Результаты голосования:</b>\n{likes} 👍 | {dislikes} 👎",
+        "en": "📊 <b>Voting results:</b>\n{likes} 👍 | {dislikes} 👎",
     },
     "player_hanged": {
-        "uz": "{name} kunduzgi yig'ilishda osildi! U edi {role_emoji} {role_name}.",
-        "ru": "{name} был(а) повешен(а) на дневном собрании! Он(а) был(а) {role_emoji} {role_name}.",
-        "en": "{name} was hanged at the day meeting! They were {role_emoji} {role_name}.",
+        "uz": "⚰️ <b>{name}</b> kunduzgi yig'ilishda osildi!\nU edi {role_emoji} <b>{role_name}</b>.",
+        "ru": "⚰️ <b>{name}</b> был(а) повешен(а) на дневном собрании!\nОн(а) был(а) {role_emoji} <b>{role_name}</b>.",
+        "en": "⚰️ <b>{name}</b> was hanged at the day meeting!\nThey were {role_emoji} <b>{role_name}</b>.",
     },
     "last_words_prompt_dm": {
         "uz": "💀 Siz o'yindan chetlatildingiz. Oxirgi so'zingizni shu yerga (botga) yozing — u guruhga e'lon qilinadi! ({seconds} soniya)",
@@ -531,13 +547,13 @@ TEXTS: dict[str, dict[str, str]] = {
     },
 
     "game_over_title": {
-        "uz": "O'yin tugadi!", "ru": "Игра окончена!", "en": "Game over!",
+        "uz": "🏁 <b>O'yin tugadi!</b>\n━━━━━━━━━━━━━━", "ru": "🏁 <b>Игра окончена!</b>\n━━━━━━━━━━━━━━", "en": "🏁 <b>Game over!</b>\n━━━━━━━━━━━━━━",
     },
     "winners_title": {
-        "uz": "G'oliblar:", "ru": "Победители:", "en": "Winners:",
+        "uz": "🏆 <b>G'oliblar:</b>", "ru": "🏆 <b>Победители:</b>", "en": "🏆 <b>Winners:</b>",
     },
     "other_players_title": {
-        "uz": "Qolgan o'yinchilar:", "ru": "Остальные игроки:", "en": "Other players:",
+        "uz": "👥 <b>Qolgan o'yinchilar:</b>", "ru": "👥 <b>Остальные игроки:</b>", "en": "👥 <b>Other players:</b>",
     },
     "game_duration": {
         "uz": "O'yin davomiyligi: {minutes} minut", "ru": "Длительность игры: {minutes} минут",

@@ -5,16 +5,20 @@ Guruh uchun qo'shimcha buyruqlar:
   /leave   - o'yindan/ro'yxatdan chiqish
   /lang    - guruhning standart tilini o'zgartirish (faqat adminlar)
   /sozlamalar - guruh sozlamalarini ko'rish (faqat adminlar)
-  /gsend   - kimgadir reply qilib olmos berish (faqat adminlar)
-  /mgive   - kimgadir reply qilib pul berish (faqat adminlar)
+  /gsend, /give   - kimgadir reply qilib olmos hadya qilish (yoki "100-10" ko'rinishida - giveaway, faqat admin)
+  /mgive          - kimgadir reply qilib pul hadya qilish (yoki "100-10" ko'rinishida - giveaway, faqat admin)
+  /change         - /gsend bilan bir xil (olmos), giveaway rejimida ham ishlaydi
   /vsgame  - jamoaviy (versus) o'yin rejimi
 """
 import logging
 import asyncio
+import random
+import re
 
 from aiogram import Router, F
 from aiogram.filters import Command, CommandObject
-from aiogram.types import Message
+from aiogram.types import Message, CallbackQuery
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from config import MIN_PLAYERS
 import config
@@ -24,6 +28,11 @@ from keyboards.common_kb import language_kb
 
 router = Router(name="group_commands_extra")
 logger = logging.getLogger(__name__)
+
+GIVEAWAY_RE = re.compile(r"^(\d+)\s*-\s*(\d+)$")
+# giveaway_id -> {chat_id, message_id, amount, count, diamonds, participants: {uid: name}}
+ACTIVE_GIVEAWAYS: dict[str, dict] = {}
+_giveaway_seq = 0
 
 
 async def is_group_admin(message: Message) -> bool:
@@ -126,14 +135,114 @@ async def cmd_group_settings(message: Message):
     )
 
 
-@router.message(Command("gsend"), F.chat.type.in_({"group", "supergroup"}))
+@router.message(Command("gsend", "give"), F.chat.type.in_({"group", "supergroup"}))
 async def cmd_gsend(message: Message, command: CommandObject):
-    await _gift_reply(message, command, diamonds=True)
+    await _gift_or_giveaway(message, command, diamonds=True)
+
+
+@router.message(Command("change"), F.chat.type.in_({"group", "supergroup"}))
+async def cmd_change(message: Message, command: CommandObject):
+    await _gift_or_giveaway(message, command, diamonds=True)
 
 
 @router.message(Command("mgive"), F.chat.type.in_({"group", "supergroup"}))
 async def cmd_mgive(message: Message, command: CommandObject):
-    await _gift_reply(message, command, diamonds=False)
+    await _gift_or_giveaway(message, command, diamonds=False)
+
+
+async def _gift_or_giveaway(message: Message, command: CommandObject, diamonds: bool):
+    """Reply bo'lsa -- shaxsiy hadya (o'z hisobidan). Reply bo'lmasa va 'summa-son' formatida
+    bo'lsa -- guruhga giveaway (faqat adminlar boshlaydi, bonus sifatida beriladi)."""
+    args = (command.args or "").strip()
+    m = GIVEAWAY_RE.match(args)
+    if not message.reply_to_message and m:
+        await _start_giveaway(message, int(m.group(1)), int(m.group(2)), diamonds)
+        return
+    await _gift_reply(message, command, diamonds)
+
+
+async def _start_giveaway(message: Message, amount: int, count: int, diamonds: bool):
+    global _giveaway_seq
+    if not await is_group_admin(message):
+        await message.answer("❌ Sovg'a (giveaway) tarqatishni faqat guruh adminlari boshlashi mumkin.")
+        return
+    if amount <= 0 or count <= 0:
+        await message.answer("❌ Miqdor va odam sonini to'g'ri kiriting. Masalan: /mgive 100-10")
+        return
+
+    _giveaway_seq += 1
+    gid = f"{message.chat.id}:{_giveaway_seq}"
+    unit = "olmos" if diamonds else "$"
+    ACTIVE_GIVEAWAYS[gid] = {
+        "chat_id": message.chat.id, "amount": amount, "count": count,
+        "diamonds": diamonds, "participants": {},
+    }
+
+    builder = InlineKeyboardBuilder()
+    builder.button(text="🎁 Qatnashish (0)", callback_data=f"giveaway_join:{gid}")
+
+    text = (
+        f"{'💎' if diamonds else '💵'} <b>{message.from_user.full_name}</b> {count} ta odamga "
+        f"{amount} {unit} tarqatyapti!\n\nQatnashish uchun pastdagi tugmani bosing."
+    )
+    msg = await message.answer(text, reply_markup=builder.as_markup())
+    ACTIVE_GIVEAWAYS[gid]["message_id"] = msg.message_id
+    asyncio.create_task(_finish_giveaway(message.bot, gid))
+
+
+async def _finish_giveaway(bot, gid: str, seconds: int = 30):
+    await asyncio.sleep(seconds)
+    data = ACTIVE_GIVEAWAYS.pop(gid, None)
+    if not data:
+        return
+    unit = "olmos" if data["diamonds"] else "$"
+    participants = list(data["participants"].items())  # [(uid, name), ...]
+
+    if not participants:
+        text = "🎁 Sovg'a tarqatish yakunlandi, lekin hech kim qatnashmadi."
+    else:
+        count = min(data["count"], len(participants))
+        winners = random.sample(participants, count)
+        share = data["amount"] // count
+        for uid, _name in winners:
+            if data["diamonds"]:
+                await crud.update_user_balance(uid, diamond_delta=share)
+            else:
+                await crud.update_user_balance(uid, money_delta=share)
+        names = ", ".join(name for _uid, name in winners)
+        text = (
+            f"🎉 <b>Sovg'a tarqatildi!</b>\nHar biriga: <b>{share} {unit}</b>\n\n🏆 G'oliblar:\n{names}"
+        )
+    try:
+        await bot.edit_message_text(text, chat_id=data["chat_id"], message_id=data["message_id"])
+    except Exception:
+        try:
+            await bot.send_message(data["chat_id"], text)
+        except Exception:
+            pass
+
+
+@router.callback_query(F.data.startswith("giveaway_join:"))
+async def on_giveaway_join(callback: CallbackQuery):
+    gid = callback.data.split(":", 1)[1]
+    data = ACTIVE_GIVEAWAYS.get(gid)
+    if not data:
+        await callback.answer("⏰ Bu sovg'a tarqatish yakunlangan.", show_alert=True)
+        return
+    uid = callback.from_user.id
+    if uid in data["participants"]:
+        await callback.answer("ℹ️ Siz allaqachon qatnashyapsiz.")
+        return
+    data["participants"][uid] = callback.from_user.full_name
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text=f"🎁 Qatnashish ({len(data['participants'])})", callback_data=f"giveaway_join:{gid}"
+    )
+    try:
+        await callback.message.edit_reply_markup(reply_markup=builder.as_markup())
+    except Exception:
+        pass
+    await callback.answer("✅ Qatnashdingiz!")
 
 
 async def _gift_reply(message: Message, command: CommandObject, diamonds: bool):
