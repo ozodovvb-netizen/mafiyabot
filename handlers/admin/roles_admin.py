@@ -68,12 +68,30 @@ async def adm_role_team(callback: CallbackQuery, state: FSMContext):
 async def adm_role_action(callback: CallbackQuery, state: FSMContext):
     action = callback.data.split(":", 1)[1]
     await state.update_data(action=action)
-    await state.set_state(AdminRole.waiting_description)
+    await state.set_state(AdminRole.waiting_mode)
+
+    modes = await crud.get_game_modes(active_only=False)
+    modes_text = (
+        "\n".join(f"• {m.name} ({m.min_players}-{m.max_players} kishi)" for m in modes)
+        if modes else "— hozircha maxsus rejim yo'q, faqat \"classic\" mavjud —"
+    )
     await callback.message.edit_text(
+        "🎲 Bu rol qaysi o'yin rejimiga tegishli? Rejim nomini yozing "
+        "(mos rejim bo'lmasa \"classic\" deb yozing):\n\n"
+        f"Mavjud rejimlar:\n{modes_text}",
+        reply_markup=back_admin_kb("adm:roles"),
+    )
+    await callback.answer()
+
+
+@router.message(AdminRole.waiting_mode)
+async def adm_role_mode(message: Message, state: FSMContext):
+    await state.update_data(mode=message.text.strip().lower() or "classic")
+    await state.set_state(AdminRole.waiting_description)
+    await message.answer(
         "✍️ Rol tavsifini yozing (bu matn foydalanuvchi /roles bosganda ko'radigan tavsif bo'ladi - "
         "'bu rol nima qila oladi'):"
     )
-    await callback.answer()
 
 
 @router.message(AdminRole.waiting_description)
@@ -96,6 +114,7 @@ async def adm_role_max(message: Message, state: FSMContext):
         night_action_type=NightActionType(data["action"]),
         description=data["description"],
         max_per_game=int(message.text.strip()),
+        mode=data.get("mode", "classic"),
     )
     await state.clear()
     roles = await crud.get_roles(active_only=False)

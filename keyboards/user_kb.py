@@ -28,8 +28,8 @@ def profile_menu_kb(lang: str) -> InlineKeyboardMarkup:
     builder.button(text=t("btn_himoyalar", lang), callback_data="open:protections")
     builder.button(text=t("btn_para", lang), callback_data="open:money")
     builder.button(text=t("btn_dokon", lang), callback_data="open:shop")
-    builder.button(text=t("btn_xarid_qilish", lang), callback_data="open:buy_diamonds")
-    builder.button(text=t("btn_xarid_qilish", lang), callback_data="open:buy_money")
+    builder.button(text=t("btn_buy_diamonds", lang), callback_data="open:buy_diamonds")
+    builder.button(text=t("btn_buy_money", lang), callback_data="open:buy_money")
     builder.button(text=t("btn_mening_geroyim", lang), callback_data="open:my_hero")
     builder.button(text=t("btn_premium_groups", lang), callback_data="open:premium_groups")
     builder.button(text=t("btn_change_language", lang), callback_data="open:change_language")
@@ -47,7 +47,7 @@ def protections_kb(lang: str, user: User) -> InlineKeyboardMarkup:
         ("📄", "hujjat_on", "hujjat"),
         ("🪂", "osishdan_himoya_on", "osishdan_himoya"),
         ("🩸", "qotildan_himoya_on", "qotildan_himoya"),
-        ("🌾", "miltiq_on", "miltiq"),
+        ("🔫", "miltiq_on", "miltiq"),
         ("🧪", "doridan_himoya_on", "doridan_himoya"),
         ("🎭", "maska_on", "maska"),
         ("🥷", "sirpanishdan_himoya_on", "sirpanishdan_himoya"),

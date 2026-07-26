@@ -13,7 +13,7 @@ router = Router(name="profile")
 
 async def render_profile_text(user_id: int, lang: str, display_name: str) -> str:
     user = await crud.get_user(user_id)
-    news_channel = await crud.get_setting("news_channel", "@SherifMafiaNews")
+    news_channel = await crud.get_setting("news_channel", "@AgencyMafiaa")
 
     active_role_name = t("no_role", lang)
     if user.active_hero_id:

@@ -10,7 +10,7 @@ from database.db import async_session
 from database.models import (
     User, ShopItem, Hero, UserHero, Role, PremiumGroup, MoneyPackage,
     DiamondPackage, DiamondTopupRequest, PartnerRequest, BotSetting,
-    AdminUser, GameSession, GamePlayer, RewardSettings, GroupSetting,
+    AdminUser, GameSession, GamePlayer, RewardSettings, GroupSetting, GameMode,
     GenderEnum, ProtectionType, DiamondRequestStatus, GameStatus,
 )
 
@@ -281,11 +281,13 @@ async def set_active_hero(user_id: int, hero_id: int | None):
 # ---------------------------------------------------------------------------
 # ROLES (Rollar)
 # ---------------------------------------------------------------------------
-async def get_roles(active_only: bool = True) -> list[Role]:
+async def get_roles(active_only: bool = True, mode: str | None = None) -> list[Role]:
     async with async_session() as s:
         q = select(Role).order_by(Role.priority)
         if active_only:
             q = q.where(Role.is_active == True)  # noqa: E712
+        if mode:
+            q = q.where(Role.mode == mode)
         res = await s.execute(q)
         return list(res.scalars().all())
 
@@ -308,6 +310,42 @@ async def delete_role(role_id: int):
     async with async_session() as s:
         await s.execute(delete(Role).where(Role.id == role_id))
         await s.commit()
+
+
+# ---------------------------------------------------------------------------
+# O'YIN REJIMLARI
+# ---------------------------------------------------------------------------
+async def get_game_modes(active_only: bool = True) -> list[GameMode]:
+    async with async_session() as s:
+        q = select(GameMode).order_by(GameMode.min_players)
+        if active_only:
+            q = q.where(GameMode.is_active == True)  # noqa: E712
+        res = await s.execute(q)
+        return list(res.scalars().all())
+
+
+async def create_game_mode(**kwargs) -> GameMode:
+    async with async_session() as s:
+        gm = GameMode(**kwargs)
+        s.add(gm)
+        await s.commit()
+        await s.refresh(gm)
+        return gm
+
+
+async def delete_game_mode(mode_id: int):
+    async with async_session() as s:
+        await s.execute(delete(GameMode).where(GameMode.id == mode_id))
+        await s.commit()
+
+
+async def get_mode_for_player_count(count: int) -> str:
+    """Berilgan o'yinchilar soniga mos rejimni topadi. Topilmasa "classic" ga qaytadi."""
+    modes = await get_game_modes(active_only=True)
+    for m in modes:
+        if m.min_players <= count <= m.max_players:
+            return m.name
+    return "classic"
 
 
 # ---------------------------------------------------------------------------

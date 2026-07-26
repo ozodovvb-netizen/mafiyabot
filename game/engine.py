@@ -17,6 +17,7 @@ from datetime import datetime
 from aiogram import Bot
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+import config
 from config import (
     NIGHT_SECONDS, DAY_DISCUSSION_SECONDS, VOTING_SECONDS, LAST_WORDS_SECONDS,
     REGISTRATION_SECONDS, MIN_PLAYERS,
@@ -25,6 +26,7 @@ from database import crud
 from database.models import NightActionType, RoleTeam
 from locales.texts import t
 from game.roles_logic import assign_roles, check_win_condition
+from utils.helpers import mention
 
 # Har bir chat uchun faol o'yin (chat_id -> GameEngine)
 ACTIVE_GAMES: dict[int, "GameEngine"] = {}
@@ -38,6 +40,7 @@ class PlayerState:
         self.alive = True
         self.last_active = datetime.utcnow()
         self.protected_tonight = False
+        self.acted_this_cycle = True  # birinchi tunda hali sikl boshlanmagan, shuning uchun True
 
 
 class GameEngine:
@@ -52,7 +55,7 @@ class GameEngine:
         self.votes: dict[int, str] = {}            # voter_id -> "like"/"dislike"
         self.current_nominee: int | None = None
         self.lang = "uz"
-        self.mode = "classic"
+        self.mode = "avtomatik"
         self.registration_open = True
         self.registration_message_id: int | None = None
         self.group_link: str | None = None
@@ -60,6 +63,7 @@ class GameEngine:
         self.nomination_open = False
         self.nominations: dict[int, int] = {}  # voter_id -> nominee_id
         self.vote_message_id: int | None = None
+        self.phase: str = "registration"  # registration | night | day | finished
 
     # -------------------------------------------------------------------
     # RO'YXATDAN O'TISH
@@ -76,17 +80,17 @@ class GameEngine:
     def alive_ids(self) -> set[int]:
         return {p.user_id for p in self.alive_players()}
 
+    async def registration_welcome_text(self) -> str:
+        """/game buyrug'i yuborilgan zahoti (hali hech kim real ravishda qo'shilmasdan) chiqadigan banner."""
+        return t("game_registration_banner", self.lang, mode=self.mode)
+
     async def registration_message_text(self) -> str:
-        import config
-        names = "\n".join(f"{i+1}. {p.name}" for i, p in enumerate(self.players.values())) or "—"
+        from utils.helpers import mention
+        names = "\n".join(f"{i+1}. {mention(p.user_id, p.name)}" for i, p in enumerate(self.players.values())) or "—"
         count = len(self.players)
-        filled = min(count, MIN_PLAYERS)
-        bar = "🟩" * filled + "⬜️" * max(0, MIN_PLAYERS - filled)
         return t(
             "group_registration_open", self.lang,
-            min_players=MIN_PLAYERS, max_players=config.MAX_PLAYERS,
-            players_list=names, count=count, progress_bar=bar,
-            seconds=REGISTRATION_SECONDS, mode=self.mode,
+            min_players=MIN_PLAYERS, players_list=names, count=count,
         )
 
     async def refresh_registration_message(self):
@@ -118,7 +122,10 @@ class GameEngine:
             ACTIVE_GAMES.pop(self.chat_id, None)
             return
 
-        roles = await crud.get_roles()
+        self.mode = await crud.get_mode_for_player_count(len(self.players))
+        roles = await crud.get_roles(mode=self.mode)
+        if not roles:
+            roles = await crud.get_roles()  # rejimga mos rol topilmasa - hammasidan foydalanamiz
         if not roles:
             await self.bot.send_message(self.chat_id, "❌ Hozircha rollar sozlanmagan. Admin /admin orqali rol qo'shishi kerak.")
             ACTIVE_GAMES.pop(self.chat_id, None)
@@ -197,6 +204,19 @@ class GameEngine:
     # TUN
     # -------------------------------------------------------------------
     async def run_night_phase(self):
+        self.phase = "night"
+        if self.day_number > 1:
+            await self._kick_inactive_players()
+            if self.stopped:
+                return
+            winner = check_win_condition(
+                {uid: p.role for uid, p in self.players.items()}, self.alive_ids()
+            )
+            if winner:
+                await self.finish_game(winner)
+                return
+        for p in self.alive_players():
+            p.acted_this_cycle = False
         self.night_actions.clear()
         night_text = t("night_started", self.lang, night_number=self.day_number)
         await self._send_phase_media("night.mp4", "night.png", night_text)
@@ -214,6 +234,19 @@ class GameEngine:
             return
         await self._announce_night_flavor()
         await self._resolve_night_actions()
+
+    async def _kick_inactive_players(self):
+        """O'tgan to'liq tun+kun siklida hech qanday harakat qilmagan (tungi harakat ham,
+        kunduzgi ovoz ham bermagan) o'yinchilarni o'yindan chetlatadi."""
+        to_kick = [p for p in self.alive_players() if not p.acted_this_cycle]
+        for p in to_kick:
+            p.alive = False
+            try:
+                await self.bot.send_message(
+                    self.chat_id, t("afk_kicked", self.lang, name=mention(p.user_id, p.name))
+                )
+            except Exception:
+                pass
 
     async def _send_phase_media(self, video_name: str, photo_name: str, caption: str):
         """Video (mp4) yuborishga urinadi, bo'lmasa rasm, u ham bo'lmasa oddiy matn yuboradi."""
@@ -318,7 +351,9 @@ class GameEngine:
                 lines.append(template.format(role=f"{actor.role.emoji} {actor.role.name}"))
 
         if lines:
-            await self.bot.send_message(self.chat_id, "\n".join(lines))
+            for line in lines:
+                await self.bot.send_message(self.chat_id, line)
+                await asyncio.sleep(1.2)
 
     async def _send_night_action_prompt(self, actor: PlayerState):
         builder = InlineKeyboardBuilder()
@@ -338,6 +373,9 @@ class GameEngine:
 
     def register_night_action(self, actor_id: int, target_id: int):
         self.night_actions[actor_id] = target_id
+        actor = self.players.get(actor_id)
+        if actor:
+            actor.acted_this_cycle = True
 
     async def _resolve_night_actions(self):
         # Kim o'ldirilmoqchi ekanini aniqlaymiz
@@ -384,16 +422,43 @@ class GameEngine:
                     pass
 
         if died:
-            await self.bot.send_message(self.chat_id, t("night_kill_announced", self.lang))
+            await self.bot.send_message(self.chat_id, await self._build_night_deaths_text(died))
             for d in died:
                 await self._handle_elimination_last_words(d, killed_at_night=True)
         else:
             await self.bot.send_message(self.chat_id, t("trust_message", self.lang))
 
+    async def _build_night_deaths_text(self, died: list) -> str:
+        """Har bir tunda o'lgan o'yinchi uchun rol nomini va (agar bo'lsa) o'sha kecha unga
+        boshqa (o'ldiruvchi bo'lmagan) rol tashrif buyurganini oshkor qiladigan matn tuzadi."""
+        from utils.helpers import mention
+        lines = [t("night_deaths_title", self.lang)]
+        for d in died:
+            role_label = f"{d.role.emoji} {d.role.name}" if d.role else ""
+            line = t("night_death_line", self.lang, role=role_label, name=mention(d.user_id, d.name))
+
+            visitor_id = None
+            for actor_id, target_id in self.night_actions.items():
+                if target_id != d.user_id or actor_id == d.user_id:
+                    continue
+                actor = self.players.get(actor_id)
+                if not actor or not actor.role or actor.role.night_action_type == NightActionType.kill:
+                    continue
+                visitor_id = actor_id
+                break
+
+            if visitor_id:
+                visitor = self.players[visitor_id]
+                visitor_label = f"{visitor.role.emoji} {visitor.role.name}" if visitor.role else "??"
+                line += " " + t("night_death_visitor", self.lang, visitor_role=visitor_label)
+            lines.append(line)
+        return "\n".join(lines)
+
     # -------------------------------------------------------------------
     # KUN (muhokama + nominatsiya + ovoz berish)
     # -------------------------------------------------------------------
     async def run_day_phase(self):
+        self.phase = "day"
         day_text = t("day_started", self.lang, day_number=self.day_number)
         await self._send_phase_media("day.mp4", "day.png", day_text)
         await self.bot.send_message(self.chat_id, self._day_roster_and_teams_text())
@@ -419,10 +484,15 @@ class GameEngine:
         builder.button(text="👎 0", callback_data=f"vote_dislike:{self.chat_id}")
         builder.adjust(2)
 
+        go_to_bot_kb = InlineKeyboardBuilder()
+        go_to_bot_kb.button(text="🤖 Botga o'tish", url=f"https://t.me/{config.BOT_USERNAME}")
+        keyboard = builder.as_markup()
+        keyboard.inline_keyboard += go_to_bot_kb.as_markup().inline_keyboard
+
         vote_msg = await self.bot.send_message(
             self.chat_id,
-            f"⚖️ {nominee.name} nomzod bo'ldi!\n" + t("voting_started", self.lang, seconds=VOTING_SECONDS),
-            reply_markup=builder.as_markup(),
+            f"⚖️ {mention(nominee.user_id, nominee.name)} nomzod bo'ldi!\n" + t("voting_started", self.lang, seconds=VOTING_SECONDS),
+            reply_markup=keyboard,
         )
         self.vote_message_id = vote_msg.message_id
 
@@ -432,22 +502,27 @@ class GameEngine:
 
         likes = sum(1 for v in self.votes.values() if v == "like")
         dislikes = sum(1 for v in self.votes.values() if v == "dislike")
-        await self.bot.send_message(self.chat_id, t("vote_result", self.lang, likes=likes, dislikes=dislikes))
         self.vote_message_id = None
+
+        if likes == dislikes:
+            await self.bot.send_message(self.chat_id, t("vote_tie", self.lang, likes=likes, dislikes=dislikes))
+        else:
+            await self.bot.send_message(self.chat_id, t("vote_result", self.lang, likes=likes, dislikes=dislikes))
 
         if likes > dislikes:
             nominee.alive = False
             await self.bot.send_message(
                 self.chat_id,
-                t("player_hanged", self.lang, name=nominee.name, role_emoji=nominee.role.emoji, role_name=nominee.role.name),
+                t("player_hanged", self.lang, name=mention(nominee.user_id, nominee.name), role_emoji=nominee.role.emoji, role_name=nominee.role.name),
             )
             await self._handle_elimination_last_words(nominee, killed_at_night=False)
 
         self.current_nominee = None
 
     def _day_roster_and_teams_text(self) -> str:
+        from utils.helpers import mention
         alive = self.alive_players()
-        numbered = "\n".join(f"{i+1}. {p.name}" for i, p in enumerate(alive))
+        numbered = "\n".join(f"{i+1}. {mention(p.user_id, p.name)}" for i, p in enumerate(alive))
 
         team_labels = {"peaceful": "Tinchlar", "mafia": "Mafiyalar", "solo": "Yakkalar"}
         grouped: dict[str, list] = {}
@@ -460,7 +535,7 @@ class GameEngine:
             members = grouped.get(key)
             if not members:
                 continue
-            names = ", ".join(f"{p.role.emoji} {p.name}" for p in members)
+            names = ", ".join(f"{p.role.emoji} {mention(p.user_id, p.name)}" for p in members)
             team_blocks.append(f"<b>{team_labels[key]} - {len(members)}:</b>\n{names}")
 
         return (
@@ -485,7 +560,7 @@ class GameEngine:
                 if target.user_id == voter.user_id:
                     continue
                 builder.button(text=target.name, callback_data=f"nominate:{self.chat_id}:{target.user_id}")
-            builder.adjust(2)
+            builder.adjust(1)
             try:
                 await self.bot.send_message(
                     voter.user_id,
@@ -515,7 +590,11 @@ class GameEngine:
 
         if max_votes < 2 and len(tally) > 1:
             # hamma turli odamga ovoz berdi -- kelisha olishmadi
-            await self.bot.send_message(self.chat_id, "🤷 Aholi kelisha olmadi! Ovoz berish yakunlandi.")
+            await self.bot.send_message(
+                self.chat_id,
+                "🤷 <b>Ovoz berish yakunlandi:</b>\n"
+                "Axoli kelisha olmadi... Kelisha olmaslik oqibatida xech kim osilmadi...",
+            )
             return None
 
         top_candidates = [uid for uid, c in tally.items() if c == max_votes]
@@ -530,12 +609,18 @@ class GameEngine:
         if nominee_id not in self.alive_ids():
             return False
         self.nominations[voter_id] = nominee_id
+        voter = self.players.get(voter_id)
+        if voter:
+            voter.acted_this_cycle = True
         return True
 
     def register_vote(self, voter_id: int, choice: str):
         if voter_id not in self.alive_ids():
             return False
         self.votes[voter_id] = choice
+        voter = self.players.get(voter_id)
+        if voter:
+            voter.acted_this_cycle = True
         return True
 
     async def refresh_vote_counts(self):
@@ -560,6 +645,7 @@ class GameEngine:
     # -------------------------------------------------------------------
     async def _handle_elimination_last_words(self, player: PlayerState, killed_at_night: bool):
         from handlers.group.registration import LAST_WORDS_LISTENERS
+        from utils.helpers import mention
 
         dm_sent = True
         try:
@@ -571,7 +657,7 @@ class GameEngine:
             dm_sent = False
 
         await self.bot.send_message(
-            self.chat_id, t("last_words_wait_group", self.lang, name=player.name)
+            self.chat_id, t("last_words_wait_group", self.lang, name=mention(player.user_id, player.name))
         )
 
         words = "..."
@@ -586,22 +672,24 @@ class GameEngine:
                 LAST_WORDS_LISTENERS.pop(player.user_id, None)
 
         await self.bot.send_message(
-            self.chat_id, t("last_words_announced", self.lang, name=player.name, words=words)
+            self.chat_id, t("last_words_announced", self.lang, name=mention(player.user_id, player.name), words=words)
         )
 
     # -------------------------------------------------------------------
     # O'YIN TUGASHI
     # -------------------------------------------------------------------
     async def finish_game(self, winner_team: str):
+        self.phase = "finished"
+        self.stopped = True
         await crud.finish_game(self.session_id)
 
         winners = [p for p in self.players.values() if p.role and p.role.team.value == winner_team]
         others = [p for p in self.players.values() if p not in winners]
 
-        winners_text = "\n".join(f"{i+1}. {p.name} — {p.role.emoji} {p.role.name}" for i, p in enumerate(winners))
-        others_text = "\n".join(f"{i+1}. {p.name} — {p.role.emoji} {p.role.name}" for i, p in enumerate(others))
+        winners_text = "\n".join(f"{i+1}. {mention(p.user_id, p.name)} — {p.role.emoji} {p.role.name}" for i, p in enumerate(winners))
+        others_text = "\n".join(f"{i+1}. {mention(p.user_id, p.name)} — {p.role.emoji} {p.role.name}" for i, p in enumerate(others))
 
-        news_channel = await crud.get_setting("news_channel", "@SherifMafiaNews")
+        news_channel = await crud.get_setting("news_channel", "@AgencyMafiaa")
 
         text = (
             f"{t('game_over_title', self.lang)}\n\n"

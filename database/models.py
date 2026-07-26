@@ -189,6 +189,20 @@ class Role(Base):
     max_per_game: Mapped[int] = mapped_column(Integer, default=1)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     priority: Mapped[int] = mapped_column(Integer, default=0)  # tungi harakat tartibi (kichik son oldin ishlaydi)
+    mode: Mapped[str] = mapped_column(String(32), default="classic")  # bu rol qaysi o'yin rejimida ishlatiladi
+
+
+# ---------------------------------------------------------------------------
+# O'YIN REJIMLARI (nechta o'yinchi bo'lsa qaysi rejim avtomatik tanlanadi)
+# ---------------------------------------------------------------------------
+class GameMode(Base):
+    __tablename__ = "game_modes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(32))                 # masalan "classic", "zombi", "chaos"
+    min_players: Mapped[int] = mapped_column(Integer, default=5)
+    max_players: Mapped[int] = mapped_column(Integer, default=45)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
 # ---------------------------------------------------------------------------

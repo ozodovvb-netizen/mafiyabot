@@ -37,8 +37,15 @@ class AdminRole(StatesGroup):
     waiting_name = State()
     waiting_team = State()
     waiting_action_type = State()
+    waiting_mode = State()
     waiting_description = State()
     waiting_max_per_game = State()
+
+
+class AdminGameMode(StatesGroup):
+    waiting_name = State()
+    waiting_min_players = State()
+    waiting_max_players = State()
 
 
 class AdminPremiumGroup(StatesGroup):

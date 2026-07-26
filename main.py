@@ -28,6 +28,7 @@ from handlers.user import start, profile, protections, shop, money, money_shop, 
 from handlers.admin import (
     panel, users_admin, shop_admin, heroes_admin, roles_admin,
     premium_groups_admin, prices_admin, diamond_requests_admin, settings_admin,
+    game_modes_admin,
 )
 
 # --- Guruh (o'yin) handlerlari ---
@@ -86,6 +87,7 @@ async def main():
     dp.include_router(prices_admin.router)
     dp.include_router(diamond_requests_admin.router)
     dp.include_router(settings_admin.router)
+    dp.include_router(game_modes_admin.router)
 
     # Guruh (o'yin) routerlari
     dp.include_router(game_start.router)

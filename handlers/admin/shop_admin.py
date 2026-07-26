@@ -13,7 +13,7 @@ router = Router(name="shop_admin")
 
 PROTECTION_EMOJI = {
     "himoya": "🛡", "hujjat": "📄", "osishdan_himoya": "🪂", "qotildan_himoya": "🩸",
-    "miltiq": "🌾", "doridan_himoya": "🧪", "maska": "🎭",
+    "miltiq": "🔫", "doridan_himoya": "🧪", "maska": "🎭",
     "sirpanishdan_himoya": "🥷", "qahramon_himoyasi": "📗",
 }
 

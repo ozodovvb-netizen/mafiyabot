@@ -9,6 +9,7 @@ def admin_main_kb() -> InlineKeyboardMarkup:
     builder.button(text="🛒 Do'kon (Himoyalar)", callback_data="adm:shop")
     builder.button(text="🦸 Geroylar", callback_data="adm:heroes")
     builder.button(text="🎭 Rollar", callback_data="adm:roles")
+    builder.button(text="🎯 O'yin rejimlari", callback_data="adm:game_modes")
     builder.button(text="💎 Premium guruhlar", callback_data="adm:premium_groups")
     builder.button(text="💵 Pul narxlari", callback_data="adm:money_prices")
     builder.button(text="💎 Olmos paketlari", callback_data="adm:diamond_prices")
@@ -95,7 +96,7 @@ def protection_type_select_kb() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     types = [
         ("himoya", "🛡 Himoya"), ("hujjat", "📄 Hujjat"), ("osishdan_himoya", "🪂 Osishdan himoya"),
-        ("qotildan_himoya", "🩸 Qotildan himoya"), ("miltiq", "🌾 Miltiq"),
+        ("qotildan_himoya", "🩸 Qotildan himoya"), ("miltiq", "🔫 Miltiq"),
         ("doridan_himoya", "🧪 Doridan himoya"), ("maska", "🎭 Maska"),
         ("sirpanishdan_himoya", "🥷 Sirpanishdan himoya"), ("qahramon_himoyasi", "📗 Qahramon himoyasi"),
     ]

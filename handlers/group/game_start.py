@@ -46,7 +46,7 @@ async def cmd_game(message: Message):
         engine.add_player(message.from_user.id, full_name(message.from_user))
         await crud.add_game_player(session.id, message.from_user.id, full_name(message.from_user))
 
-        await _send_and_pin_registration(engine, message)
+        await _send_and_pin_registration(engine, message, banner=True)
         asyncio.create_task(registration_timer(engine))
     except Exception:
         logger.exception("/game buyrug'ida xatolik yuz berdi (chat_id=%s)", message.chat.id)
@@ -79,13 +79,13 @@ async def _resolve_group_link(message: Message) -> str | None:
         return None
 
 
-async def _send_and_pin_registration(engine: GameEngine, message: Message):
+async def _send_and_pin_registration(engine: GameEngine, message: Message, banner: bool = False):
     builder = InlineKeyboardBuilder()
     builder.button(
         text="🎮 Qo'shilish",
         url=f"https://t.me/{config.BOT_USERNAME}?start=join_{engine.session_id}",
     )
-    text = await engine.registration_message_text()
+    text = await engine.registration_welcome_text() if banner else await engine.registration_message_text()
     msg = await message.answer(text, reply_markup=builder.as_markup())
 
     # Avvalgi ro'yxatdan o'tish xabarini yechib, yangisini qadaymiz

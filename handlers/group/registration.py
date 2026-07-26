@@ -5,11 +5,13 @@ Guruh o'yini bilan bog'liq callbacklar va xabar tinglovchilari:
   - Oxirgi so'z (endi guruhda emas — botning shaxsiy chatida yozilgan matnni GameEngine
     kutmoqda bo'lsa ushlab oladi, keyin guruhga e'lon qilinadi)
   - Faolsizlarni kuzatish (juda uzoq javob bermasa ogohlantirish/chetlatish)
+  - Tunda guruh chatini bloklash (yozgan foydalanuvchi xabari o'chirilib, 1 daqiqaga mute qilinadi)
 """
 import asyncio
+from datetime import datetime, timedelta
 
 from aiogram import Router, F
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, Message, ChatPermissions
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from game.engine import ACTIVE_GAMES
@@ -17,9 +19,49 @@ from locales.texts import t
 
 router = Router(name="group_registration")
 
+NIGHT_MUTE_SECONDS = 60
+
 # user_id -> asyncio.Future - oxirgi so'zni kutayotgan "signal"
 # (o'yinchi botning shaxsiy chatiga yozadi, guruhga emas)
 LAST_WORDS_LISTENERS: dict[int, asyncio.Future] = {}
+
+
+async def _is_night_chat_spam(message: Message) -> bool:
+    """Faqat: guruh chatida, faol o'yin tunda, va matn buyruq (/...) bo'lmasa True."""
+    if message.chat.type not in ("group", "supergroup"):
+        return False
+    if not message.from_user or message.from_user.is_bot:
+        return False
+    engine = ACTIVE_GAMES.get(message.chat.id)
+    if not engine or engine.phase != "night":
+        return False
+    if message.text and message.text.startswith("/"):
+        return False
+    try:
+        member = await message.bot.get_chat_member(message.chat.id, message.from_user.id)
+        if member.status in ("administrator", "creator"):
+            return False
+    except Exception:
+        pass
+    return True
+
+
+@router.message(_is_night_chat_spam)
+async def block_night_group_chat(message: Message):
+    """Tun paytida guruhga yozilgan xabarlarni o'chirib, yozgan odamni 1 daqiqaga mute qiladi."""
+    try:
+        await message.delete()
+    except Exception:
+        pass
+    try:
+        await message.bot.restrict_chat_member(
+            message.chat.id,
+            message.from_user.id,
+            permissions=ChatPermissions(can_send_messages=False),
+            until_date=datetime.utcnow() + timedelta(seconds=NIGHT_MUTE_SECONDS),
+        )
+    except Exception:
+        pass  # bot cheklash huquqiga ega bo'lmasligi mumkin
 
 
 @router.callback_query(F.data.startswith("night_act:"))
@@ -65,7 +107,15 @@ async def on_nominate(callback: CallbackQuery):
         pass
 
     try:
-        await callback.bot.send_message(chat_id, f"🗳 {voter_name} - {target_name}ga ovoz berdi.")
+        from utils.helpers import mention
+        await callback.bot.send_message(
+            chat_id,
+            t(
+                "vote_recorded", engine.lang,
+                voter=mention(callback.from_user.id, voter_name),
+                target=mention(nominee_id, target_name),
+            ),
+        )
     except Exception:
         pass
 

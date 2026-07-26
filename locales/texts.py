@@ -117,7 +117,7 @@ TEXTS: dict[str, dict[str, str]] = {
             "📄 Hujjat: {hujjat}\n"
             "🪂 Osishdan himoya: {osishdan}\n"
             "🩸 Qotildan himoya: {qotildan}\n"
-            "🌾 Miltiq: {miltiq}\n"
+            "🔫 Miltiq: {miltiq}\n"
             "🧪 Doridan himoya: {doridan}\n"
             "🎭 Maska: {maska}\n"
             "🥷 Sirpanishdan himoya: {sirpanish}\n"
@@ -138,7 +138,7 @@ TEXTS: dict[str, dict[str, str]] = {
             "📄 Документ: {hujjat}\n"
             "🪂 Защита от повешения: {osishdan}\n"
             "🩸 Защита от убийства: {qotildan}\n"
-            "🌾 Ружьё: {miltiq}\n"
+            "🔫 Ружьё: {miltiq}\n"
             "🧪 Защита от яда: {doridan}\n"
             "🎭 Маска: {maska}\n"
             "🥷 Защита от проверки: {sirpanish}\n"
@@ -158,7 +158,7 @@ TEXTS: dict[str, dict[str, str]] = {
             "📄 Document: {hujjat}\n"
             "🪂 Hanging protection: {osishdan}\n"
             "🩸 Kill protection: {qotildan}\n"
-            "🌾 Rifle: {miltiq}\n"
+            "🔫 Rifle: {miltiq}\n"
             "🧪 Poison protection: {doridan}\n"
             "🎭 Mask: {maska}\n"
             "🥷 Check protection: {sirpanish}\n"
@@ -192,12 +192,22 @@ TEXTS: dict[str, dict[str, str]] = {
         "tr": "🛡 Korumalar", "ko": "🛡 보호",
     },
     "btn_para": {
-        "uz": "💵 Para", "ru": "💵 Деньги", "en": "💵 Money", "ar": "💵 المال",
-        "id": "💵 Uang", "kk": "💵 Ақша", "tr": "💵 Para", "ko": "💵 돈",
+        "uz": "❤️ Para", "ru": "❤️ Пара", "en": "❤️ Match", "ar": "❤️ المال",
+        "id": "❤️ Uang", "kk": "❤️ Ақша", "tr": "❤️ Para", "ko": "❤️ 돈",
     },
     "btn_dokon": {
         "uz": "🛒 Do'kon", "ru": "🛒 Магазин", "en": "🛒 Shop", "ar": "🛒 المتجر",
         "id": "🛒 Toko", "kk": "🛒 Дүкен", "tr": "🛒 Mağaza", "ko": "🛒 상점",
+    },
+    "btn_buy_diamonds": {
+        "uz": "💎 Almaz sotib olish", "ru": "💎 Купить алмазы", "en": "💎 Buy diamonds",
+        "ar": "💎 شراء الألماس", "id": "💎 Beli berlian", "kk": "💎 Алмас сатып алу",
+        "tr": "💎 Elmas satın al", "ko": "💎 다이아몬드 구매",
+    },
+    "btn_buy_money": {
+        "uz": "💵 Pul sotib olish", "ru": "💵 Купить деньги", "en": "💵 Buy money",
+        "ar": "💵 شراء المال", "id": "💵 Beli uang", "kk": "💵 Ақша сатып алу",
+        "tr": "💵 Para satın al", "ko": "💵 돈 구매",
     },
     "btn_xarid_qilish": {
         "uz": "🎯 Xarid qilish", "ru": "🎯 Покупка", "en": "🎯 Purchase",
@@ -240,7 +250,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "ko": "아직 돈이 없습니다. 무작위 돈을 찾아보세요!\n\n🎲 하루 {limit}회 무료 시도.",
     },
     "btn_random_money": {
-        "uz": "🎲 Tasodifiy para topish", "ru": "🎲 Найти случайные деньги", "en": "🎲 Find random money",
+        "uz": "🎲 Tasodifiy pul topish", "ru": "🎲 Найти случайные деньги", "en": "🎲 Find random money",
         "ar": "🎲 العثور على مال عشوائي", "id": "🎲 Temukan uang acak", "kk": "🎲 Кездейсоқ ақша табу",
         "tr": "🎲 Rastgele para bul", "ko": "🎲 무작위 돈 찾기",
     },
@@ -425,39 +435,47 @@ TEXTS: dict[str, dict[str, str]] = {
     },
 
     # --- Guruh o'yini: ro'yxatdan o'tish ---
-    "group_registration_open": {
+    "game_registration_banner": {
         "uz": (
-            "🎭 <b>SHERIF MAFIA</b> 🎭\n"
-            "━━━━━━━━━━━━━━\n"
-            "🎮 <b>Ro'yxatdan o'tish boshlandi!</b>\n"
-            "🎲 Rejim: <b>{mode}</b>   ⏱ {seconds} soniya\n\n"
-            "{progress_bar}\n"
-            "👥 <b>{count}/{max_players}</b> (kamida <b>{min_players}</b> kishi kerak)\n"
-            "━━━━━━━━━━━━━━\n\n"
-            "📋 <b>Ro'yhatdan o'tganlar:</b>\n{players_list}\n\n"
-            "👇 Qo'shilish uchun pastdagi tugmani bosing!"
+            "✨ <b>YANGI O'YIN BOSHLANDI!</b> ✨\n\n"
+            "🎮 Rejim: <b>{mode}</b>\n\n"
+            "🚀 Shaharni mafiyadan tozalash vaqti keldi! O'yinga qo'shiling va o'z mahoratingizni ko'rsating!\n\n"
+            "👇 Qo'shilish uchun pastdagi tugmani bosing"
         ),
         "ru": (
-            "🎭 <b>SHERIF MAFIA</b> 🎭\n"
-            "━━━━━━━━━━━━━━\n"
-            "🎮 <b>Регистрация началась!</b>\n"
-            "🎲 Режим: <b>{mode}</b>   ⏱ {seconds} сек\n\n"
-            "{progress_bar}\n"
-            "👥 <b>{count}/{max_players}</b> (нужно минимум <b>{min_players}</b>)\n"
-            "━━━━━━━━━━━━━━\n\n"
-            "📋 <b>Зарегистрированные:</b>\n{players_list}\n\n"
-            "👇 Нажмите кнопку ниже, чтобы присоединиться!"
+            "✨ <b>НОВАЯ ИГРА НАЧАЛАСЬ!</b> ✨\n\n"
+            "🎮 Режим: <b>{mode}</b>\n\n"
+            "🚀 Пора очистить город от мафии! Присоединяйтесь и покажите своё мастерство!\n\n"
+            "👇 Нажмите кнопку ниже, чтобы присоединиться"
         ),
         "en": (
-            "🎭 <b>SHERIF MAFIA</b> 🎭\n"
-            "━━━━━━━━━━━━━━\n"
-            "🎮 <b>Registration started!</b>\n"
-            "🎲 Mode: <b>{mode}</b>   ⏱ {seconds}s\n\n"
-            "{progress_bar}\n"
-            "👥 <b>{count}/{max_players}</b> (minimum <b>{min_players}</b> needed)\n"
-            "━━━━━━━━━━━━━━\n\n"
-            "📋 <b>Registered:</b>\n{players_list}\n\n"
-            "👇 Tap the button below to join!"
+            "✨ <b>A NEW GAME HAS STARTED!</b> ✨\n\n"
+            "🎮 Mode: <b>{mode}</b>\n\n"
+            "🚀 Time to clear the city of the mafia! Join and show your skills!\n\n"
+            "👇 Tap the button below to join"
+        ),
+    },
+    "group_registration_open": {
+        "uz": (
+            "📋 <b>Ro'yxatdan o'tish davom etmoqda!</b>\n"
+            "📋 <b>Ro'yhatdan o'tganlar:</b>\n\n"
+            "{players_list}\n\n"
+            "━━━━━━━━━━━━━━━━━━\n"
+            "Jami: <b>{count}</b> ta o'yinchi"
+        ),
+        "ru": (
+            "📋 <b>Регистрация продолжается!</b>\n"
+            "📋 <b>Зарегистрированные:</b>\n\n"
+            "{players_list}\n\n"
+            "━━━━━━━━━━━━━━━━━━\n"
+            "Всего: <b>{count}</b> игроков"
+        ),
+        "en": (
+            "📋 <b>Registration is in progress!</b>\n"
+            "📋 <b>Registered:</b>\n\n"
+            "{players_list}\n\n"
+            "━━━━━━━━━━━━━━━━━━\n"
+            "Total: <b>{count}</b> players"
         ),
     },
     "btn_join_game": {
@@ -497,13 +515,18 @@ TEXTS: dict[str, dict[str, str]] = {
         "en": "⚖️ <b>Voting time!</b> ({seconds} seconds)",
     },
     "vote_recorded": {
-        "uz": "{voter} - {target}ga ovoz berdi", "ru": "{voter} - проголосовал(а) за {target}",
-        "en": "{voter} - voted for {target}",
+        "uz": "🗳 {voter} — {target}ga ovoz berdi.", "ru": "🗳 {voter} — проголосовал(а) за {target}.",
+        "en": "🗳 {voter} voted for {target}.",
     },
     "vote_result": {
         "uz": "📊 <b>Ovoz berish natijalari:</b>\n{likes} 👍 | {dislikes} 👎",
         "ru": "📊 <b>Результаты голосования:</b>\n{likes} 👍 | {dislikes} 👎",
         "en": "📊 <b>Voting results:</b>\n{likes} 👍 | {dislikes} 👎",
+    },
+    "vote_tie": {
+        "uz": "⚖️ <b>Ovoz berish natijasi: Durang!</b>\n✨ Hech kim jazolanmadi.\n📊 Ovozlar: {likes} 👍 | {dislikes} 👎",
+        "ru": "⚖️ <b>Результат голосования: Ничья!</b>\n✨ Никто не был наказан.\n📊 Голоса: {likes} 👍 | {dislikes} 👎",
+        "en": "⚖️ <b>Voting result: Tie!</b>\n✨ No one was punished.\n📊 Votes: {likes} 👍 | {dislikes} 👎",
     },
     "player_hanged": {
         "uz": "⚰️ <b>{name}</b> kunduzgi yig'ilishda osildi!\nU edi {role_emoji} <b>{role_name}</b>.",
@@ -525,10 +548,24 @@ TEXTS: dict[str, dict[str, str]] = {
         "ru": "Кто-то из жителей услышал, как {name} перед смертью кричал(а):\n\"{words}\"",
         "en": "Someone among the residents heard {name} scream before dying:\n\"{words}\"",
     },
-    "night_kill_announced": {
-        "uz": "💀 Zombilardan biri kimnidir tishlab oldi!\n🎯 Xakker o'ljasini tanladi.",
-        "ru": "💀 Один из зомби кого-то укусил!\n🎯 Хакер выбрал жертву.",
-        "en": "💀 One of the zombies bit someone!\n🎯 Hacker chose a target.",
+    "night_deaths_title": {
+        "uz": "💀 <b>Tunda o'ldirilganlar:</b>", "ru": "💀 <b>Этой ночью погибли:</b>",
+        "en": "💀 <b>Killed during the night:</b>",
+    },
+    "night_death_line": {
+        "uz": "🌙 {role} <b>{name}</b> vahshiylarcha o'ldirildi.",
+        "ru": "🌙 {role} <b>{name}</b> был(а) жестоко убит(а).",
+        "en": "🌙 {role} <b>{name}</b> was brutally killed.",
+    },
+    "night_death_visitor": {
+        "uz": "Aytishlaricha, unikiga {visitor_role} kelgan.",
+        "ru": "Говорят, к нему(ней) приходил(а) {visitor_role}.",
+        "en": "It's said {visitor_role} came to visit them.",
+    },
+    "afk_kicked": {
+        "uz": "😴 Aholidan kimdir aytishicha, {name} o'yindan chetlatilishidan oldin: \"Men bunchalik uzoq kutmayman!\" - deb qichqirganini eshitgan. (Faolsizlik uchun o'yindan chetlatildi.)",
+        "ru": "😴 Кто-то из жителей слышал, как {name} перед исключением из игры кричал(а): \"Я не буду столько ждать!\" (Исключён(а) за неактивность.)",
+        "en": "😴 Someone among the residents heard {name} shout before being removed: \"I won't wait this long!\" (Removed from the game for inactivity.)",
     },
     "trust_message": {
         "uz": "Ishonish qiyin! Lekin bu tunda hech kim o'lmadi...",
