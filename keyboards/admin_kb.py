@@ -42,6 +42,20 @@ def list_with_delete_kb(items: list, prefix: str, name_attr: str = "name", back_
     return builder.as_markup()
 
 
+def premium_groups_list_kb(items: list, back_cb: str = "adm:premium_groups") -> InlineKeyboardMarkup:
+    """Premium guruhlar ro'yxati -- har bir guruh nomi yonida admin kiritgan olmos miqdori ko'rsatiladi."""
+    builder = InlineKeyboardBuilder()
+    for item in items:
+        builder.button(
+            text=f"🗑 {item.name} — 💎 {item.diamond_rank}",
+            callback_data=f"adm_pg:del:{item.id}",
+        )
+    builder.button(text="➕ Qo'shish", callback_data="adm_pg:add")
+    builder.button(text="↩️ Orqaga", callback_data=back_cb)
+    builder.adjust(1)
+    return builder.as_markup()
+
+
 def confirm_kb(yes_cb: str, no_cb: str) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text="✅ Tasdiqlash", callback_data=yes_cb)
@@ -95,7 +109,7 @@ def role_action_select_kb() -> InlineKeyboardMarkup:
 def protection_type_select_kb() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     types = [
-        ("himoya", "🛡 Himoya"), ("hujjat", "📄 Hujjat"), ("osishdan_himoya", "🪂 Osishdan himoya"),
+        ("hujjat", "📄 Hujjat"), ("osishdan_himoya", "🪂 Osishdan himoya"),
         ("qotildan_himoya", "🩸 Qotildan himoya"), ("miltiq", "🔫 Miltiq"),
         ("doridan_himoya", "🧪 Doridan himoya"), ("maska", "🎭 Maska"),
         ("sirpanishdan_himoya", "🥷 Sirpanishdan himoya"), ("qahramon_himoyasi", "📗 Qahramon himoyasi"),

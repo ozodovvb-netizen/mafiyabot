@@ -18,7 +18,6 @@ import config
 from config import REGISTRATION_SECONDS, MIN_PLAYERS
 from database import crud
 from game.engine import GameEngine, ACTIVE_GAMES
-from utils.helpers import full_name
 
 router = Router(name="group_game_start")
 logger = logging.getLogger(__name__)
@@ -42,10 +41,8 @@ async def cmd_game(message: Message):
         engine.group_link = await _resolve_group_link(message)
         ACTIVE_GAMES[message.chat.id] = engine
 
-        # O'yinni boshlagan odam avtomatik birinchi o'yinchi sifatida qo'shiladi
-        engine.add_player(message.from_user.id, full_name(message.from_user))
-        await crud.add_game_player(session.id, message.from_user.id, full_name(message.from_user))
-
+        # ESLATMA: o'yinni boshlagan odam endi AVTOMATIK qo'shilmaydi -- xohlasa
+        # o'zi ham hammasi kabi "Qo'shilish" tugmasini bosishi kerak.
         await _send_and_pin_registration(engine, message, banner=True)
         asyncio.create_task(registration_timer(engine))
     except Exception:

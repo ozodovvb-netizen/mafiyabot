@@ -126,10 +126,13 @@ def money_packages_kb(lang: str, packages) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
-def premium_groups_kb(lang: str, groups) -> InlineKeyboardMarkup:
+def premium_groups_kb(lang: str, groups, admin_username: str = "") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for i, g in enumerate(groups, start=1):
-        builder.button(text=f"{i}. {g.name}", url=g.link)
+        builder.button(text=f"{i}. {g.name} — 💎{g.diamond_rank}", url=g.link)
+    if admin_username:
+        uname = admin_username.lstrip("@")
+        builder.button(text=t("btn_ask_admin", lang), url=f"https://t.me/{uname}")
     builder.button(text=t("btn_back", lang), callback_data="back:main")
     builder.adjust(1)
     return builder.as_markup()

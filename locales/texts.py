@@ -101,6 +101,11 @@ TEXTS: dict[str, dict[str, str]] = {
         "uz": "↩️ Orqaga", "ru": "↩️ Назад", "en": "↩️ Back", "ar": "↩️ رجوع",
         "id": "↩️ Kembali", "kk": "↩️ Артқа", "tr": "↩️ Geri", "ko": "↩️ 뒤로",
     },
+    "btn_ask_admin": {
+        "uz": "❓ Savol berish (Admin)", "ru": "❓ Задать вопрос (Админ)", "en": "❓ Ask a question (Admin)",
+        "ar": "❓ اسأل المسؤول", "id": "❓ Tanya Admin", "kk": "❓ Админге сұрақ беру",
+        "tr": "❓ Yöneticiye sor", "ko": "❓ 관리자에게 문의",
+    },
     "btn_change_language": {
         "uz": "🌐 Tilni o'zgartirish", "ru": "🌐 Изменить язык", "en": "🌐 Change language",
         "ar": "🌐 تغيير اللغة", "id": "🌐 Ubah bahasa", "kk": "🌐 Тілді өзгерту",

@@ -4,7 +4,7 @@ from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
 
 from database import crud
-from keyboards.admin_kb import list_with_delete_kb, back_admin_kb, language_pick_for_group_kb
+from keyboards.admin_kb import premium_groups_list_kb, back_admin_kb, language_pick_for_group_kb
 from states.states import AdminPremiumGroup
 from utils.helpers import is_user_admin
 
@@ -31,7 +31,7 @@ async def adm_pg_list(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
         f"💎 <b>{country.upper()}</b> uchun premium guruhlar:\n\n"
         "O'chirish uchun bosing, yangi qo'shish uchun pastdagi tugma:",
-        reply_markup=list_with_delete_kb(groups, "adm_pg", back_cb="adm:premium_groups"),
+        reply_markup=premium_groups_list_kb(groups, back_cb="adm:premium_groups"),
     )
     await callback.answer()
 
@@ -44,7 +44,7 @@ async def adm_pg_delete(callback: CallbackQuery, state: FSMContext):
     country = data.get("pg_country", "uz")
     groups = await crud.get_premium_groups(country, active_only=False)
     await callback.message.edit_reply_markup(
-        reply_markup=list_with_delete_kb(groups, "adm_pg", back_cb="adm:premium_groups")
+        reply_markup=premium_groups_list_kb(groups, back_cb="adm:premium_groups")
     )
     await callback.answer("🗑 O'chirildi")
 
@@ -88,5 +88,5 @@ async def adm_pg_rank(message: Message, state: FSMContext):
     groups = await crud.get_premium_groups(country, active_only=False)
     await message.answer(
         "✅ Premium guruh qo'shildi!",
-        reply_markup=list_with_delete_kb(groups, "adm_pg", back_cb="adm:premium_groups"),
+        reply_markup=premium_groups_list_kb(groups, back_cb="adm:premium_groups"),
     )

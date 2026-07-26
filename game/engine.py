@@ -115,9 +115,14 @@ class GameEngine:
     # -------------------------------------------------------------------
     # O'YINNI BOSHLASH
     # -------------------------------------------------------------------
-    async def start_game(self):
-        if len(self.players) < MIN_PLAYERS:
+    async def start_game(self, force: bool = False):
+        if not force and len(self.players) < MIN_PLAYERS:
             await self.bot.send_message(self.chat_id, t("not_enough_players", self.lang))
+            await crud.update_game_status(self.session_id, __import__("database.models", fromlist=["GameStatus"]).GameStatus.cancelled)
+            ACTIVE_GAMES.pop(self.chat_id, None)
+            return
+        if len(self.players) < 2:
+            await self.bot.send_message(self.chat_id, "❌ O'yinni boshlash uchun kamida 2 ta o'yinchi kerak.")
             await crud.update_game_status(self.session_id, __import__("database.models", fromlist=["GameStatus"]).GameStatus.cancelled)
             ACTIVE_GAMES.pop(self.chat_id, None)
             return

@@ -20,17 +20,18 @@ async def open_premium_groups(callback: CallbackQuery):
     lang = user.language or "uz"
     groups = await crud.get_premium_groups(lang)
     groups = groups[:10]
+    admin_username = await crud.get_setting("admin_username", "@Hackeruzbekistan001")
 
     if not groups:
         await callback.message.edit_text(
             t("no_premium_groups", lang),
-            reply_markup=premium_groups_kb(lang, []),
+            reply_markup=premium_groups_kb(lang, [], admin_username),
         )
         await callback.answer()
         return
 
     await callback.message.edit_text(
         t("premium_groups_title", lang),
-        reply_markup=premium_groups_kb(lang, groups),
+        reply_markup=premium_groups_kb(lang, groups, admin_username),
     )
     await callback.answer()

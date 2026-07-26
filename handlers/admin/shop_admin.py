@@ -1,4 +1,6 @@
 """Admin - Do'kon bo'limi: himoya buyumlarini qo'shish/o'chirish."""
+import logging
+
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
@@ -10,6 +12,7 @@ from states.states import AdminShopItem
 from utils.helpers import is_user_admin
 
 router = Router(name="shop_admin")
+logger = logging.getLogger(__name__)
 
 PROTECTION_EMOJI = {
     "himoya": "🛡", "hujjat": "📄", "osishdan_himoya": "🪂", "qotildan_himoya": "🩸",
@@ -103,15 +106,22 @@ async def adm_shop_category(message: Message, state: FSMContext):
     data = await state.get_data()
     emoji = PROTECTION_EMOJI.get(data["protection_type"], "🛡")
 
-    await crud.create_shop_item(
-        name=data["name"],
-        emoji=emoji,
-        protection_type=ProtectionType(data["protection_type"]),
-        description=data["description"],
-        price_money=data["price_money"],
-        price_diamond=data["price_diamond"],
-        category=category,
-    )
+    try:
+        await crud.create_shop_item(
+            name=data["name"],
+            emoji=emoji,
+            protection_type=ProtectionType(data["protection_type"]),
+            description=data["description"],
+            price_money=data["price_money"],
+            price_diamond=data["price_diamond"],
+            category=category,
+        )
+    except Exception:
+        logger.exception("Do'kon buyumini qo'shishda xatolik")
+        await state.clear()
+        await message.answer("❌ Buyumni qo'shishda xatolik yuz berdi. Qaytadan urinib ko'ring: /admin")
+        return
+
     await state.clear()
     items = await crud.get_shop_items(active_only=False)
     await message.answer("✅ Buyum qo'shildi!", reply_markup=list_with_delete_kb(items, "adm_shop"))

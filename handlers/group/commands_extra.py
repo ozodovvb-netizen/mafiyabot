@@ -61,13 +61,13 @@ async def cmd_force_start(message: Message):
     if not await is_group_admin(message):
         await message.answer("❌ Ro'yxatdan o'tishni muddatidan oldin faqat guruh admini boshlashi mumkin.")
         return
-    if len(engine.players) < MIN_PLAYERS:
-        await message.answer(f"❌ O'yinni boshlash uchun kamida {MIN_PLAYERS} ta o'yinchi kerak.")
+    if len(engine.players) < 2:
+        await message.answer("❌ O'yinni boshlash uchun kamida 2 ta o'yinchi kerak.")
         return
 
     engine.registration_open = False
     await message.answer(f"▶️ Admin tomonidan o'yin majburiy boshlandi ({len(engine.players)} o'yinchi bilan).")
-    asyncio.create_task(engine.start_game())
+    asyncio.create_task(engine.start_game(force=True))
 
 
 @router.message(Command("leave"), F.chat.type.in_({"group", "supergroup"}))
