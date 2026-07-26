@@ -53,6 +53,7 @@ class GameEngine:
         self.current_nominee: int | None = None
         self.lang = "uz"
         self.registration_open = True
+        self.registration_message_id: int | None = None
 
     # -------------------------------------------------------------------
     # RO'YXATDAN O'TISH
@@ -75,6 +76,25 @@ class GameEngine:
             "group_registration_open", self.lang,
             min_players=MIN_PLAYERS, players_list=names or "-", count=len(self.players)
         )
+
+    async def refresh_registration_message(self):
+        """Mavjud (qadalgan) ro'yxatdan o'tish xabarini yangi o'yinchilar ro'yxati bilan tahrirlaydi."""
+        if not self.registration_message_id:
+            return
+        builder = InlineKeyboardBuilder()
+        import config
+        builder.button(
+            text="🎮 Qo'shilish",
+            url=f"https://t.me/{config.BOT_USERNAME}?start=join_{self.session_id}",
+        )
+        text = await self.registration_message_text()
+        try:
+            await self.bot.edit_message_text(
+                text, chat_id=self.chat_id, message_id=self.registration_message_id,
+                reply_markup=builder.as_markup(),
+            )
+        except Exception:
+            pass
 
     # -------------------------------------------------------------------
     # O'YINNI BOSHLASH
@@ -158,7 +178,15 @@ class GameEngine:
     # -------------------------------------------------------------------
     async def run_night_phase(self):
         self.night_actions.clear()
-        await self.bot.send_message(self.chat_id, f"🌙 {self.day_number}-kun uchun " + t("night_started", self.lang))
+        night_text = t("night_started", self.lang, night_number=self.day_number)
+        try:
+            import os
+            from aiogram.types import FSInputFile
+            asset_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "night.png")
+            photo = FSInputFile(asset_path)
+            await self.bot.send_photo(self.chat_id, photo, caption=night_text)
+        except Exception:
+            await self.bot.send_message(self.chat_id, night_text)
 
         # Harakat qiluvchi rollarga DM orqali nishon tanlash so'raladi
         actionable = [

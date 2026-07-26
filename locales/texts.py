@@ -419,24 +419,30 @@ TEXTS: dict[str, dict[str, str]] = {
         "tr": "Rol listesi:", "ko": "역할 목록:",
     },
     "role_detail": {
-        "uz": "{emoji} {name}\n\n{description}",
-        "ru": "{emoji} {name}\n\n{description}",
-        "en": "{emoji} {name}\n\n{description}",
+        "uz": "{emoji} <b>{name}</b>\n━━━━━━━━━━━━━━\n\n{description}",
+        "ru": "{emoji} <b>{name}</b>\n━━━━━━━━━━━━━━\n\n{description}",
+        "en": "{emoji} <b>{name}</b>\n━━━━━━━━━━━━━━\n\n{description}",
     },
 
     # --- Guruh o'yini: ro'yxatdan o'tish ---
     "group_registration_open": {
         "uz": (
-            "🎮 Ro'yxatdan o'tish boshlandi! Kamida {min_players} kishi kerak.\n\n"
-            "Ro'yhatdan o'tganlar:\n{players_list}\n\nJami: {count} ta o'yinchi"
+            "🎮 <b>Ro'yxatdan o'tish boshlandi!</b>\n"
+            "Kamida <b>{min_players}</b> kishi kerak.\n"
+            "━━━━━━━━━━━━━━\n\n"
+            "👥 <b>Ro'yhatdan o'tganlar ({count}):</b>\n{players_list}"
         ),
         "ru": (
-            "🎮 Регистрация началась! Нужно минимум {min_players} человек.\n\n"
-            "Зарегистрированные:\n{players_list}\n\nВсего: {count} игроков"
+            "🎮 <b>Регистрация началась!</b>\n"
+            "Нужно минимум <b>{min_players}</b> человек.\n"
+            "━━━━━━━━━━━━━━\n\n"
+            "👥 <b>Зарегистрированные ({count}):</b>\n{players_list}"
         ),
         "en": (
-            "🎮 Registration started! At least {min_players} players needed.\n\n"
-            "Registered:\n{players_list}\n\nTotal: {count} players"
+            "🎮 <b>Registration started!</b>\n"
+            "At least <b>{min_players}</b> players needed.\n"
+            "━━━━━━━━━━━━━━\n\n"
+            "👥 <b>Registered ({count}):</b>\n{players_list}"
         ),
     },
     "btn_join_game": {
@@ -462,9 +468,9 @@ TEXTS: dict[str, dict[str, str]] = {
         "en": "🎮 Game started! (Mode: {mode})",
     },
     "night_started": {
-        "uz": "🌙 Tun boshlandi. Rollar o'z vazifasini bajarishlari mumkin.",
-        "ru": "🌙 Наступила ночь. Роли могут выполнять свои действия.",
-        "en": "🌙 Night has begun. Roles may act.",
+        "uz": "🌙 {night_number}-tun boshlandi. Rollar o'z vazifasini bajarishlari mumkin.",
+        "ru": "🌙 Наступила {night_number}-я ночь. Роли могут выполнять свои действия.",
+        "en": "🌙 Night {night_number} has begun. Roles may act.",
     },
     "day_started": {
         "uz": "🌞 {day_number}-kun boshlandi.", "ru": "🌞 Начался {day_number}-й день.",

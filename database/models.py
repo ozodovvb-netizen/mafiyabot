@@ -192,6 +192,16 @@ class Role(Base):
 
 
 # ---------------------------------------------------------------------------
+# GURUH SOZLAMALARI (har bir guruh uchun til va h.k.)
+# ---------------------------------------------------------------------------
+class GroupSetting(Base):
+    __tablename__ = "group_settings"
+
+    chat_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    language: Mapped[str] = mapped_column(String(8), default="uz")
+
+
+# ---------------------------------------------------------------------------
 # PREMIUM GURUHLAR
 # ---------------------------------------------------------------------------
 class PremiumGroup(Base):

@@ -6,10 +6,10 @@ from config import LANGUAGES
 from locales.texts import t
 
 
-def language_kb() -> InlineKeyboardMarkup:
+def language_kb(prefix: str = "lang") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for code, (flag, name) in LANGUAGES.items():
-        builder.button(text=f"{flag} {name}", callback_data=f"lang:{code}")
+        builder.button(text=f"{flag} {name}", callback_data=f"{prefix}:{code}")
     builder.adjust(2)
     return builder.as_markup()
 

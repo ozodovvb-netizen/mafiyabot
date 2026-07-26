@@ -40,7 +40,10 @@ def _normalize_database_url(raw_url: str) -> str:
 BOT_TOKEN = os.getenv("BOT_TOKEN", "PUT_YOUR_BOT_TOKEN_HERE")
 
 # Botning o'zi ishlaydigan username (deep-link uchun, masalan https://t.me/Sherif_mafiabot)
-BOT_USERNAME = os.getenv("BOT_USERNAME", "Sherif_mafiabot")
+# Eslatma: bu yerga "@" belgisisiz, faqat username yozing (masalan "Sherif_mafiabot").
+# Har holda ishga tushganda main.py bot.get_me() orqali haqiqiy username'ni avtomatik
+# tekshirib, kerak bo'lsa to'g'irlab qo'yadi.
+BOT_USERNAME = os.getenv("BOT_USERNAME", "Sherif_mafiabot").strip().lstrip("@")
 
 # --- Bosh adminlar (bot ishga tushganda avtomatik admin huquqiga ega bo'ladi) ---
 # .env faylida: SUPER_ADMINS=123456789,987654321

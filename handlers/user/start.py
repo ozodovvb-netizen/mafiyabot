@@ -18,16 +18,17 @@ from database.models import GenderEnum
 from locales.texts import t
 from keyboards.common_kb import language_kb, gender_kb
 from keyboards.user_kb import start_menu_kb
-from utils.helpers import full_name
+from utils.helpers import full_name, is_user_admin
 from game.engine import ACTIVE_GAMES
 
 router = Router(name="start")
 
 
 async def send_start_menu(message_or_cb, lang: str, edit: bool = False):
+    user_id = message_or_cb.from_user.id
     admin_username = await crud.get_setting("admin_username", "@Hackeruzbekistan001")
     text = t("start_welcome", lang, max_players=MAX_PLAYERS, admin_username=admin_username)
-    kb = start_menu_kb(lang)
+    kb = start_menu_kb(lang, is_admin=await is_user_admin(user_id))
     if edit:
         await message_or_cb.message.edit_text(text, reply_markup=kb)
     else:
@@ -36,37 +37,47 @@ async def send_start_menu(message_or_cb, lang: str, edit: bool = False):
 
 async def handle_join_payload(message: Message, session_id: int, user, lang: str, user_id: int, display_name: str):
     """Foydalanuvchi guruhdagi 'Qo'shilish' tugmasi orqali botga kelganda ishlaydi."""
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+
     target_engine = None
     for engine in ACTIVE_GAMES.values():
         if engine.session_id == session_id:
             target_engine = engine
             break
 
-    if not target_engine or not target_engine.registration_open:
+    if not target_engine:
         await message.answer("❌ Bu o'yin uchun ro'yxatdan o'tish yopilgan yoki o'yin topilmadi.")
+        return
+
+    go_to_group_kb = InlineKeyboardBuilder()
+    go_to_group_kb.button(text=t("btn_go_to_group", lang), url=f"https://t.me/c/{str(target_engine.chat_id)[4:]}")
+    go_to_group_kb = go_to_group_kb.as_markup()
+
+    if user_id in target_engine.players:
+        await message.answer("ℹ️ Siz bu o'yinga allaqachon qo'shilgansiz.", reply_markup=go_to_group_kb)
+        return
+
+    if not target_engine.registration_open:
+        await message.answer("⏰ Siz o'yinga kech qoldingiz. Ro'yxatdan o'tish allaqachon yopilgan.", reply_markup=go_to_group_kb)
         return
 
     added = target_engine.add_player(user_id, display_name)
     await crud.add_game_player(session_id, user_id, display_name)
 
     if not added:
-        await message.answer("ℹ️ Siz allaqachon ro'yxatdan o'tgansiz.")
+        await message.answer("ℹ️ Siz bu o'yinga allaqachon qo'shilgansiz.", reply_markup=go_to_group_kb)
         return
 
-    from aiogram.utils.keyboard import InlineKeyboardBuilder
-    builder = InlineKeyboardBuilder()
-    builder.button(text=t("btn_go_to_group", lang), url=f"https://t.me/c/{str(target_engine.chat_id)[4:]}")
-    await message.answer(t("joined_game_success", lang), reply_markup=builder.as_markup())
+    await message.answer(t("joined_game_success", lang), reply_markup=go_to_group_kb)
 
     # Guruhdagi ro'yxatni yangilash (agar registratsiya xabari mavjud bo'lsa)
     try:
-        text = await target_engine.registration_message_text()
-        await message.bot.send_message(target_engine.chat_id, text)
+        await target_engine.refresh_registration_message()
     except Exception:
         pass
 
 
-@router.message(CommandStart(deep_link=True))
+@router.message(CommandStart(deep_link=True), F.chat.type == "private")
 async def cmd_start_deeplink(message: Message, command: CommandObject, state: FSMContext):
     await state.clear()
     tg_user = message.from_user
@@ -90,7 +101,7 @@ async def cmd_start_deeplink(message: Message, command: CommandObject, state: FS
         await send_start_menu(message, user.language)
 
 
-@router.message(CommandStart())
+@router.message(CommandStart(), F.chat.type == "private")
 async def cmd_start(message: Message, state: FSMContext):
     await state.clear()
     tg_user = message.from_user

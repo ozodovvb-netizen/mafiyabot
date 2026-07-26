@@ -10,7 +10,7 @@ from database.db import async_session
 from database.models import (
     User, ShopItem, Hero, UserHero, Role, PremiumGroup, MoneyPackage,
     DiamondPackage, DiamondTopupRequest, PartnerRequest, BotSetting,
-    AdminUser, GameSession, GamePlayer, RewardSettings,
+    AdminUser, GameSession, GamePlayer, RewardSettings, GroupSetting,
     GenderEnum, ProtectionType, DiamondRequestStatus, GameStatus,
 )
 
@@ -61,6 +61,22 @@ async def update_user_balance(user_id: int, money_delta: int = 0, diamond_delta:
         user.diamonds = max(0, user.diamonds + diamond_delta)
         await s.commit()
         return user
+
+
+async def get_group_language(chat_id: int) -> str:
+    async with async_session() as s:
+        row = await s.get(GroupSetting, chat_id)
+        return row.language if row else "uz"
+
+
+async def set_group_language(chat_id: int, language: str):
+    async with async_session() as s:
+        row = await s.get(GroupSetting, chat_id)
+        if row:
+            row.language = language
+        else:
+            s.add(GroupSetting(chat_id=chat_id, language=language))
+        await s.commit()
 
 
 async def toggle_protection(user_id: int, protection_field: str):

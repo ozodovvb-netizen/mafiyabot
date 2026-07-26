@@ -18,7 +18,8 @@ def admin_main_kb() -> InlineKeyboardMarkup:
     builder.button(text="💳 Karta raqami", callback_data="adm:card_number")
     builder.button(text="👮 Adminlar", callback_data="adm:admins")
     builder.button(text="📊 Statistika", callback_data="adm:stats")
-    builder.adjust(1, 2, 2, 2, 2, 2, 1)
+    builder.button(text="⬅️ Chiqish", callback_data="back:main")
+    builder.adjust(1, 2, 2, 2, 2, 2, 1, 1)
     return builder.as_markup()
 
 
