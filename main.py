@@ -55,8 +55,8 @@ async def _setup_bot_commands(bot: Bot):
         BotCommand(command="profile", description="👤 Profilim"),
         BotCommand(command="lang", description="🌐 Guruh tilini o'zgartirish (admin)"),
         BotCommand(command="sozlamalar", description="⚙️ Guruh sozlamalari (admin)"),
-        BotCommand(command="gsend", description="💎 Olmos berish (reply, admin)"),
-        BotCommand(command="mgive", description="💵 Pul berish (reply, admin)"),
+        BotCommand(command="gsend", description="💎 Olmos hadya qilish (reply)"),
+        BotCommand(command="msend", description="💵 Pul hadya qilish (reply)"),
     ]
     await bot.set_my_commands(private_commands, scope=BotCommandScopeAllPrivateChats())
     await bot.set_my_commands(group_commands, scope=BotCommandScopeAllGroupChats())
