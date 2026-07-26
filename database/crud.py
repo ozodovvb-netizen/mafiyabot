@@ -528,6 +528,18 @@ async def update_reward_settings(**kwargs):
         await s.commit()
 
 
+async def get_top_users_by_money(limit: int = 10) -> list[User]:
+    async with async_session() as s:
+        res = await s.execute(select(User).order_by(User.money.desc()).limit(limit))
+        return list(res.scalars().all())
+
+
+async def get_top_users_by_diamonds(limit: int = 10) -> list[User]:
+    async with async_session() as s:
+        res = await s.execute(select(User).order_by(User.diamonds.desc()).limit(limit))
+        return list(res.scalars().all())
+
+
 # ---------------------------------------------------------------------------
 # O'YIN SESSIYASI
 # ---------------------------------------------------------------------------

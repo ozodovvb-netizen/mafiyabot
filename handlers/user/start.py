@@ -49,9 +49,11 @@ async def handle_join_payload(message: Message, session_id: int, user, lang: str
         await message.answer("❌ Bu o'yin uchun ro'yxatdan o'tish yopilgan yoki o'yin topilmadi.")
         return
 
-    go_to_group_kb = InlineKeyboardBuilder()
-    go_to_group_kb.button(text=t("btn_go_to_group", lang), url=f"https://t.me/c/{str(target_engine.chat_id)[4:]}")
-    go_to_group_kb = go_to_group_kb.as_markup()
+    go_to_group_kb = None
+    if target_engine.group_link:
+        builder = InlineKeyboardBuilder()
+        builder.button(text=t("btn_go_to_group", lang), url=target_engine.group_link)
+        go_to_group_kb = builder.as_markup()
 
     if user_id in target_engine.players:
         await message.answer("ℹ️ Siz bu o'yinga allaqachon qo'shilgansiz.", reply_markup=go_to_group_kb)

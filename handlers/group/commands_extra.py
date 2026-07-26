@@ -10,6 +10,7 @@ Guruh uchun qo'shimcha buyruqlar:
   /vsgame  - jamoaviy (versus) o'yin rejimi
 """
 import logging
+import asyncio
 
 from aiogram import Router, F
 from aiogram.filters import Command, CommandObject
@@ -49,13 +50,13 @@ async def cmd_force_start(message: Message):
     if not await is_group_admin(message):
         await message.answer("❌ Ro'yxatdan o'tishni muddatidan oldin faqat guruh admini boshlashi mumkin.")
         return
-    if len(engine.players) < 3:
-        await message.answer("❌ O'yinni boshlash uchun kamida 3 ta o'yinchi kerak.")
+    if len(engine.players) < MIN_PLAYERS:
+        await message.answer(f"❌ O'yinni boshlash uchun kamida {MIN_PLAYERS} ta o'yinchi kerak.")
         return
 
     engine.registration_open = False
     await message.answer(f"▶️ Admin tomonidan o'yin majburiy boshlandi ({len(engine.players)} o'yinchi bilan).")
-    await engine.start_game()
+    asyncio.create_task(engine.start_game())
 
 
 @router.message(Command("leave"), F.chat.type.in_({"group", "supergroup"}))
@@ -127,39 +128,90 @@ async def cmd_group_settings(message: Message):
 
 @router.message(Command("gsend"), F.chat.type.in_({"group", "supergroup"}))
 async def cmd_gsend(message: Message, command: CommandObject):
-    await _give_reply(message, command, diamonds=True)
+    await _gift_reply(message, command, diamonds=True)
 
 
 @router.message(Command("mgive"), F.chat.type.in_({"group", "supergroup"}))
 async def cmd_mgive(message: Message, command: CommandObject):
-    await _give_reply(message, command, diamonds=False)
+    await _gift_reply(message, command, diamonds=False)
 
 
-async def _give_reply(message: Message, command: CommandObject, diamonds: bool):
-    if not await is_group_admin(message):
-        await message.answer("❌ Bu buyruq faqat guruh adminlari uchun.")
-        return
+async def _gift_reply(message: Message, command: CommandObject, diamonds: bool):
+    """Guruhda HAR QANDAY foydalanuvchi reply qilib o'z olmos/pulidan boshqasiga hadya qilishi mumkin."""
+    cmd_name = "gsend" if diamonds else "mgive"
+    unit = "olmos" if diamonds else "pul"
     if not message.reply_to_message:
-        unit = "olmos" if diamonds else "pul"
-        await message.answer(f"ℹ️ Kimgadir {unit} berish uchun o'sha odamning xabariga reply qilib, "
-                              f"masalan: <code>/{'gsend' if diamonds else 'mgive'} 10</code> deb yozing.")
+        await message.answer(
+            f"ℹ️ Kimgadir {unit} hadya qilish uchun o'sha odamning xabariga reply qilib, "
+            f"masalan: <code>/{cmd_name} 10</code> deb yozing."
+        )
         return
     try:
         amount = int((command.args or "").strip().split()[0])
         if amount <= 0:
             raise ValueError
     except (ValueError, IndexError):
-        await message.answer("❌ Miqdorni to'g'ri kiriting. Masalan: /gsend 10")
+        await message.answer(f"❌ Miqdorni to'g'ri kiriting. Masalan: /{cmd_name} 10")
         return
 
-    target = message.reply_to_message.from_user
-    await crud.get_or_create_user(target.id, target.username, target.full_name)
+    sender_tg = message.from_user
+    target_tg = message.reply_to_message.from_user
+    if target_tg.id == sender_tg.id:
+        await message.answer("❌ O'zingizga hadya bera olmaysiz.")
+        return
+    if target_tg.is_bot:
+        await message.answer("❌ Botga hadya bera olmaysiz.")
+        return
+
+    sender, _ = await crud.get_or_create_user(sender_tg.id, sender_tg.username, sender_tg.full_name)
+    balance = sender.diamonds if diamonds else sender.money
+    if balance < amount:
+        await message.answer(f"❌ Hisobingizda yetarli {unit} yo'q (balansingiz: {balance}).")
+        return
+
+    await crud.get_or_create_user(target_tg.id, target_tg.username, target_tg.full_name)
     if diamonds:
-        await crud.update_user_balance(target.id, diamond_delta=amount)
-        await message.answer(f"💎 {target.full_name}ga {amount} ta olmos berildi.")
+        await crud.update_user_balance(sender_tg.id, diamond_delta=-amount)
+        await crud.update_user_balance(target_tg.id, diamond_delta=amount)
+        emoji = "💎"
     else:
-        await crud.update_user_balance(target.id, money_delta=amount)
-        await message.answer(f"💵 {target.full_name}ga {amount} pul berildi.")
+        await crud.update_user_balance(sender_tg.id, money_delta=-amount)
+        await crud.update_user_balance(target_tg.id, money_delta=amount)
+        emoji = "💵"
+
+    await message.answer(
+        f"{emoji} <b>{sender_tg.full_name}</b> — <b>{target_tg.full_name}</b>ga {amount} {unit} hadya qildi!"
+    )
+
+
+def _medal(i: int) -> str:
+    return {0: "🥇", 1: "🥈", 2: "🥉"}.get(i, "⭐" if i < 9 else "👤")
+
+
+@router.message(Command("boylar"))
+async def cmd_boylar(message: Message):
+    """💰 Eng boylar reytingi (dollar va olmos bo'yicha) - istalgan chatda ishlaydi."""
+    top_money = await crud.get_top_users_by_money(10)
+    top_diamonds = await crud.get_top_users_by_diamonds(10)
+
+    money_lines = "\n".join(
+        f"{_medal(i)} {u.first_name or u.username or u.id} — {u.money:,} 💵".replace(",", " ")
+        for i, u in enumerate(top_money)
+    ) or "—"
+    diamond_lines = "\n".join(
+        f"{_medal(i)} {u.first_name or u.username or u.id} — {u.diamonds:,} 💎".replace(",", " ")
+        for i, u in enumerate(top_diamonds)
+    ) or "—"
+
+    text = (
+        "🏆 <b>Eng boylar (Dollar bo'yicha)</b>\n"
+        "━━━━━━━━━━━━━━\n"
+        f"{money_lines}\n\n"
+        "💎 <b>Eng boylar (Olmos bo'yicha)</b>\n"
+        "━━━━━━━━━━━━━━\n"
+        f"{diamond_lines}"
+    )
+    await message.answer(text)
 
 
 @router.message(Command("vsgame"), F.chat.type.in_({"group", "supergroup"}))

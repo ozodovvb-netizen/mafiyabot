@@ -44,6 +44,7 @@ async def _setup_bot_commands(bot: Bot):
         BotCommand(command="start", description="🏠 Botni ishga tushirish / bosh menyu"),
         BotCommand(command="profile", description="👤 Profilim"),
         BotCommand(command="roles", description="🎭 Rollar ro'yxati"),
+        BotCommand(command="boylar", description="🏆 Eng boy o'yinchilar reytingi"),
     ]
     group_commands = [
         BotCommand(command="game", description="🎮 O'yin boshlash (ro'yxatdan o'tish)"),
@@ -56,7 +57,8 @@ async def _setup_bot_commands(bot: Bot):
         BotCommand(command="lang", description="🌐 Guruh tilini o'zgartirish (admin)"),
         BotCommand(command="sozlamalar", description="⚙️ Guruh sozlamalari (admin)"),
         BotCommand(command="gsend", description="💎 Olmos hadya qilish (reply)"),
-        BotCommand(command="msend", description="💵 Pul hadya qilish (reply)"),
+        BotCommand(command="mgive", description="💵 Pul hadya qilish (reply)"),
+        BotCommand(command="boylar", description="🏆 Eng boy o'yinchilar reytingi"),
     ]
     await bot.set_my_commands(private_commands, scope=BotCommandScopeAllPrivateChats())
     await bot.set_my_commands(group_commands, scope=BotCommandScopeAllGroupChats())

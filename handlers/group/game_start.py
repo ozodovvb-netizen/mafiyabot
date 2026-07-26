@@ -39,6 +39,7 @@ async def cmd_game(message: Message):
 
         session = await crud.create_game_session(message.chat.id, message.from_user.id)
         engine = GameEngine(message.bot, message.chat.id, session.id, message.from_user.id)
+        engine.group_link = await _resolve_group_link(message)
         ACTIVE_GAMES[message.chat.id] = engine
 
         # O'yinni boshlagan odam avtomatik birinchi o'yinchi sifatida qo'shiladi
@@ -54,6 +55,28 @@ async def cmd_game(message: Message):
             "❌ O'yinni boshlashda xatolik yuz berdi. Admin /admin orqali rollar sozlanganini "
             "tekshirsin, keyin qayta urinib ko'ring."
         )
+
+
+async def _resolve_group_link(message: Message) -> str | None:
+    """'Guruhga o'tish' tugmasi ishlashi uchun haqiqiy havolani aniqlaydi.
+
+    t.me/c/<id> formati ko'p holatda ishlamaydi (faqat allaqachon a'zo bo'lgan
+    va Telegram ilovasida ochilgan holatlarda ishlaydi), shuning uchun:
+      1) Guruh public bo'lsa (@username bor) -> https://t.me/<username>
+      2) Aks holda bot orqali chaqiriladigan (yoki mavjud) invite link ishlatiladi
+         (bot uchun "Foydalanuvchi qo'shish" admin huquqi kerak).
+    """
+    if message.chat.username:
+        return f"https://t.me/{message.chat.username}"
+    try:
+        return await message.bot.export_chat_invite_link(message.chat.id)
+    except Exception:
+        logger.warning(
+            "Guruh (chat_id=%s) uchun invite link olib bo'lmadi -- botga "
+            "'Foydalanuvchilarni taklif qilish' admin huquqini bering.",
+            message.chat.id,
+        )
+        return None
 
 
 async def _send_and_pin_registration(engine: GameEngine, message: Message):
@@ -106,5 +129,6 @@ async def cmd_stop_game(message: Message):
         if member.status not in ("administrator", "creator"):
             await message.answer("❌ Faqat o'yinni boshlagan yoki guruh admini o'yinni to'xtata oladi.")
             return
+    engine.stopped = True
     ACTIVE_GAMES.pop(message.chat.id, None)
     await message.answer("🛑 O'yin to'xtatildi.")

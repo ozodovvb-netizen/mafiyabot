@@ -54,6 +54,10 @@ class GameEngine:
         self.lang = "uz"
         self.registration_open = True
         self.registration_message_id: int | None = None
+        self.group_link: str | None = None
+        self.stopped = False
+        self.nomination_open = False
+        self.nominations: dict[int, int] = {}  # voter_id -> nominee_id
 
     # -------------------------------------------------------------------
     # RO'YXATDAN O'TISH
@@ -154,8 +158,12 @@ class GameEngine:
     # -------------------------------------------------------------------
     async def run_game_loop(self):
         while True:
+            if self.stopped:
+                return
             self.day_number += 1
             await self.run_night_phase()
+            if self.stopped:
+                return
 
             winner = check_win_condition(
                 {uid: p.role for uid, p in self.players.items()}, self.alive_ids()
@@ -165,6 +173,8 @@ class GameEngine:
                 return
 
             await self.run_day_phase()
+            if self.stopped:
+                return
 
             winner = check_win_condition(
                 {uid: p.role for uid, p in self.players.items()}, self.alive_ids()
@@ -198,7 +208,32 @@ class GameEngine:
             await self._send_night_action_prompt(p)
 
         await asyncio.sleep(NIGHT_SECONDS)
+        if self.stopped:
+            return
+        await self._announce_night_flavor()
         await self._resolve_night_actions()
+
+    async def _announce_night_flavor(self):
+        """Kimni nishonga olganini oshkor qilmasdan, qaysi rollar harakat qilganini guruhga bildiradi."""
+        seen_roles = set()
+        lines = []
+        for actor_id in self.night_actions.keys():
+            actor = self.players.get(actor_id)
+            if not actor or not actor.role:
+                continue
+            key = actor.role.id or actor.role.name
+            if key in seen_roles:
+                continue
+            seen_roles.add(key)
+            action = actor.role.night_action_type
+            if action == NightActionType.kill:
+                lines.append(f"🔪 {actor.role.emoji} {actor.role.name} o'z o'ljasini tanladi...")
+            elif action in (NightActionType.heal, NightActionType.protect):
+                lines.append(f"🩺 {actor.role.emoji} {actor.role.name} kimningdir mehmoniga keldi...")
+            elif action == NightActionType.check:
+                lines.append(f"🔍 {actor.role.emoji} {actor.role.name} birovni tekshirmoqda...")
+        if lines:
+            await self.bot.send_message(self.chat_id, "\n".join(lines))
 
     async def _send_night_action_prompt(self, actor: PlayerState):
         builder = InlineKeyboardBuilder()
@@ -276,13 +311,20 @@ class GameEngine:
     async def run_day_phase(self):
         await self.bot.send_message(self.chat_id, t("day_started", self.lang, day_number=self.day_number))
         await asyncio.sleep(min(DAY_DISCUSSION_SECONDS, 5))  # muhokama vaqti (qisqartirilgan demo)
+        if self.stopped:
+            return
 
         if len(self.alive_players()) <= 1:
             return
 
-        # Eng ko'p nomga ega bo'lgan o'yinchini aniqlash uchun sodda tovush (misol uchun tasodifiy tanlangan
-        # aktiv o'yinchi - real loyihada bu guruh chatidan kelgan matn buyruqlari orqali yig'iladi)
-        nominee = random.choice(self.alive_players())
+        nominee = await self._run_nomination_phase()
+        if self.stopped:
+            return
+        if not nominee or not nominee.alive:
+            await self.bot.send_message(self.chat_id, "🤐 Bugun hech kim nomzod sifatida ko'rsatilmadi.")
+            self.current_nominee = None
+            return
+
         self.current_nominee = nominee.user_id
 
         builder = InlineKeyboardBuilder()
@@ -292,12 +334,14 @@ class GameEngine:
 
         await self.bot.send_message(
             self.chat_id,
-            f"⚖️ {nominee.name} kunduzgi muhokamada shubha ostida!\n" + t("voting_started", self.lang, seconds=VOTING_SECONDS),
+            f"⚖️ {nominee.name} nomzod bo'ldi!\n" + t("voting_started", self.lang, seconds=VOTING_SECONDS),
             reply_markup=builder.as_markup(),
         )
 
         self.votes.clear()
         await asyncio.sleep(VOTING_SECONDS)
+        if self.stopped:
+            return
 
         likes = sum(1 for v in self.votes.values() if v == "like")
         dislikes = sum(1 for v in self.votes.values() if v == "dislike")
@@ -313,33 +357,85 @@ class GameEngine:
 
         self.current_nominee = None
 
+    async def _run_nomination_phase(self) -> PlayerState | None:
+        """Hamma tirik o'yinchi o'zi xohlagan boshqa o'yinchini nomzod qilib ko'rsatishi mumkin."""
+        alive = self.alive_players()
+        if len(alive) < 2:
+            return None
+
+        self.nominations.clear()
+        self.nomination_open = True
+
+        builder = InlineKeyboardBuilder()
+        for p in alive:
+            builder.button(text=p.name, callback_data=f"nominate:{self.chat_id}:{p.user_id}")
+        builder.adjust(2)
+
+        await self.bot.send_message(
+            self.chat_id,
+            f"🗳 Kimni shubha ostiga qo'yasiz? Nomzod tanlang! ({VOTING_SECONDS} soniya)",
+            reply_markup=builder.as_markup(),
+        )
+
+        await asyncio.sleep(VOTING_SECONDS)
+        self.nomination_open = False
+
+        if not self.nominations:
+            return None
+
+        tally: dict[int, int] = {}
+        for nominee_id in self.nominations.values():
+            tally[nominee_id] = tally.get(nominee_id, 0) + 1
+        max_votes = max(tally.values())
+        top_candidates = [uid for uid, c in tally.items() if c == max_votes]
+        winner_id = random.choice(top_candidates)
+        return self.players.get(winner_id)
+
+    def register_nomination(self, voter_id: int, nominee_id: int):
+        if not self.nomination_open:
+            return False
+        if voter_id not in self.alive_ids():
+            return False
+        if nominee_id not in self.alive_ids():
+            return False
+        self.nominations[voter_id] = nominee_id
+        return True
+
     def register_vote(self, voter_id: int, choice: str):
+        if voter_id not in self.alive_ids():
+            return False
         self.votes[voter_id] = choice
+        return True
 
     # -------------------------------------------------------------------
-    # OXIRGI SO'Z
+    # OXIRGI SO'Z (endi guruhda emas — o'yinchining botdagi shaxsiy chatida yoziladi)
     # -------------------------------------------------------------------
     async def _handle_elimination_last_words(self, player: PlayerState, killed_at_night: bool):
-        await self.bot.send_message(self.chat_id, t("last_words_prompt", self.lang, name=player.name))
-
-        last_words_holder = {"text": None}
-
-        def check_message(message):
-            return message.chat.id == self.chat_id and message.from_user.id == player.user_id
-
-        # Oddiy polling: keyingi LAST_WORDS_SECONDS ichida shu foydalanuvchidan kelgan matnni kutamiz.
-        # (Bu yerda soddalashtirilgan yondashuv ishlatilgan - to'liq middleware asosidagi
-        #  yechim uchun handlers/group/registration.py dagi LAST_WORDS_LISTENERS ga qarang.)
         from handlers.group.registration import LAST_WORDS_LISTENERS
-        future = asyncio.get_event_loop().create_future()
-        LAST_WORDS_LISTENERS[(self.chat_id, player.user_id)] = future
 
+        dm_sent = True
         try:
-            words = await asyncio.wait_for(future, timeout=LAST_WORDS_SECONDS)
-        except asyncio.TimeoutError:
-            words = "..."
-        finally:
-            LAST_WORDS_LISTENERS.pop((self.chat_id, player.user_id), None)
+            await self.bot.send_message(
+                player.user_id,
+                t("last_words_prompt_dm", self.lang, seconds=LAST_WORDS_SECONDS),
+            )
+        except Exception:
+            dm_sent = False
+
+        await self.bot.send_message(
+            self.chat_id, t("last_words_wait_group", self.lang, name=player.name)
+        )
+
+        words = "..."
+        if dm_sent:
+            future = asyncio.get_event_loop().create_future()
+            LAST_WORDS_LISTENERS[player.user_id] = future
+            try:
+                words = await asyncio.wait_for(future, timeout=LAST_WORDS_SECONDS)
+            except asyncio.TimeoutError:
+                words = "..."
+            finally:
+                LAST_WORDS_LISTENERS.pop(player.user_id, None)
 
         await self.bot.send_message(
             self.chat_id, t("last_words_announced", self.lang, name=player.name, words=words)

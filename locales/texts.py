@@ -494,9 +494,15 @@ TEXTS: dict[str, dict[str, str]] = {
         "ru": "{name} был(а) повешен(а) на дневном собрании! Он(а) был(а) {role_emoji} {role_name}.",
         "en": "{name} was hanged at the day meeting! They were {role_emoji} {role_name}.",
     },
-    "last_words_prompt": {
-        "uz": "💀 {name}, oxirgi so'zingizni ayting!", "ru": "💀 {name}, скажите свои последние слова!",
-        "en": "💀 {name}, say your last words!",
+    "last_words_prompt_dm": {
+        "uz": "💀 Siz o'yindan chetlatildingiz. Oxirgi so'zingizni shu yerga (botga) yozing — u guruhga e'lon qilinadi! ({seconds} soniya)",
+        "ru": "💀 Вы выбыли из игры. Напишите свои последние слова сюда (боту) — они будут объявлены в группе! ({seconds} секунд)",
+        "en": "💀 You've been eliminated. Write your last words here (to the bot) — they'll be announced in the group! ({seconds} seconds)",
+    },
+    "last_words_wait_group": {
+        "uz": "💀 {name} chetlatildi va hozir botga oxirgi so'zini yozmoqda...",
+        "ru": "💀 {name} выбыл(а) и сейчас пишет боту свои последние слова...",
+        "en": "💀 {name} was eliminated and is now writing their last words to the bot...",
     },
     "last_words_announced": {
         "uz": "Aholidan kimdir {name} o'limidan oldin qichqirganini eshitgan:\n\"{words}\" - deb qichqirganini eshitgan.",
