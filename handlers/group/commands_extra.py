@@ -25,6 +25,7 @@ import config
 from database import crud
 from game.engine import ACTIVE_GAMES
 from keyboards.common_kb import language_kb
+from utils.helpers import spawn_task
 
 router = Router(name="group_commands_extra")
 logger = logging.getLogger(__name__)
@@ -67,7 +68,7 @@ async def cmd_force_start(message: Message):
 
     engine.registration_open = False
     await message.answer(f"▶️ Admin tomonidan o'yin majburiy boshlandi ({len(engine.players)} o'yinchi bilan).")
-    asyncio.create_task(engine.start_game(force=True))
+    spawn_task(engine.start_game(force=True))
 
 
 @router.message(Command("leave"), F.chat.type.in_({"group", "supergroup"}))
@@ -191,7 +192,7 @@ async def _start_giveaway(message: Message, amount: int, count: int, diamonds: b
     )
     msg = await message.answer(text, reply_markup=builder.as_markup())
     ACTIVE_GIVEAWAYS[gid]["message_id"] = msg.message_id
-    asyncio.create_task(_finish_giveaway(message.bot, gid))
+    spawn_task(_finish_giveaway(message.bot, gid))
 
 
 async def _finish_giveaway(bot, gid: str, seconds: int = 30):

@@ -91,16 +91,17 @@ async def adm_shop_price_diamond(message: Message, state: FSMContext):
     await state.update_data(price_diamond=int(message.text.strip()))
     await state.set_state(AdminShopItem.waiting_category)
     await message.answer(
-        "📂 Bu buyum qaysi 'Xarid qilish' tugmasida ko'rinsin?\n"
-        "'himoya' yoki 'qurol' deb yozing (yoki 'umumiy' - faqat Do'kon bo'limida):"
+        "📂 Bu buyum qaysi Xarid qilish tugmasida ko'rinsin?\n"
+        "Qo'shtirnoqsiz shundan birini yozing: himoya | qurol | umumiy\n"
+        "(umumiy — faqat Do'kon bo'limida ko'rinadi):"
     )
 
 
 @router.message(AdminShopItem.waiting_category)
 async def adm_shop_category(message: Message, state: FSMContext):
-    category = message.text.strip().lower()
+    category = message.text.strip().lower().strip("'\"“”‘’")
     if category not in ("himoya", "qurol", "umumiy"):
-        await message.answer("❌ Faqat 'himoya', 'qurol' yoki 'umumiy' deb yozing.")
+        await message.answer("❌ Faqat himoya, qurol yoki umumiy deb yozing (qo'shtirnoqsiz).")
         return
 
     data = await state.get_data()

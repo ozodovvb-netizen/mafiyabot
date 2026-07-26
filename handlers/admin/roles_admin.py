@@ -86,7 +86,8 @@ async def adm_role_action(callback: CallbackQuery, state: FSMContext):
 
 @router.message(AdminRole.waiting_mode)
 async def adm_role_mode(message: Message, state: FSMContext):
-    await state.update_data(mode=message.text.strip().lower() or "classic")
+    mode = message.text.strip().lower().strip("'\"“”‘’") or "classic"
+    await state.update_data(mode=mode)
     await state.set_state(AdminRole.waiting_description)
     await message.answer(
         "✍️ Rol tavsifini yozing (bu matn foydalanuvchi /roles bosganda ko'radigan tavsif bo'ladi - "

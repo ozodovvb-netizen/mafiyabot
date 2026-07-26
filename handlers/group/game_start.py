@@ -18,6 +18,7 @@ import config
 from config import REGISTRATION_SECONDS, MIN_PLAYERS
 from database import crud
 from game.engine import GameEngine, ACTIVE_GAMES
+from utils.helpers import spawn_task
 
 router = Router(name="group_game_start")
 logger = logging.getLogger(__name__)
@@ -44,7 +45,7 @@ async def cmd_game(message: Message):
         # ESLATMA: o'yinni boshlagan odam endi AVTOMATIK qo'shilmaydi -- xohlasa
         # o'zi ham hammasi kabi "Qo'shilish" tugmasini bosishi kerak.
         await _send_and_pin_registration(engine, message, banner=True)
-        asyncio.create_task(registration_timer(engine))
+        spawn_task(registration_timer(engine))
     except Exception:
         logger.exception("/game buyrug'ida xatolik yuz berdi (chat_id=%s)", message.chat.id)
         ACTIVE_GAMES.pop(message.chat.id, None)

@@ -1,8 +1,38 @@
 """Turli joylarda ishlatiladigan kichik yordamchi funksiyalar."""
+import asyncio
+import logging
+
 from aiogram.types import User as TgUser
 
 from config import SUPER_ADMINS, HIDDEN_ADMINS
 from database import crud
+
+logger = logging.getLogger(__name__)
+
+# Fon vazifalarga (asyncio.create_task) kuchli havola saqlanmasa, Python ularni
+# hali tugamasdanoq "chiqindi yig'uvchi" orqali bekor qilib qo'yishi mumkin
+# (rasman hujjatlashtirilgan asyncio xatti-harakati). Shu sabab hamma fon
+# vazifalarini shu yerda ushlab turamiz.
+_BACKGROUND_TASKS: set[asyncio.Task] = set()
+
+
+def spawn_task(coro) -> asyncio.Task:
+    """asyncio.create_task o'rniga ishlatiladi -- vazifa muddatidan oldin
+    "chiqindi yig'ilib" bekor bo'lib qolmasligi uchun unga kuchli havola saqlaydi,
+    va xatolik chiqsa uni log qiladi (aks holda jim yo'qolib ketardi)."""
+    task = asyncio.create_task(coro)
+    _BACKGROUND_TASKS.add(task)
+
+    def _on_done(t: asyncio.Task):
+        _BACKGROUND_TASKS.discard(t)
+        if t.cancelled():
+            return
+        exc = t.exception()
+        if exc:
+            logger.exception("Fon vazifasida kutilmagan xatolik", exc_info=exc)
+
+    task.add_done_callback(_on_done)
+    return task
 
 
 def full_name(tg_user: TgUser) -> str:
