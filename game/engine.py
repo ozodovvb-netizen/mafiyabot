@@ -598,7 +598,7 @@ class GameEngine:
                     attacker_role=f"{attacker.role.emoji} {attacker.role.name}" if attacker.role else "",
                 ),
             )
-            await self._handle_elimination_last_words(attacker, killed_at_night=True)
+            self._schedule_last_words(attacker, killed_at_night=True)
 
         # Komissar/tekshiruvchilarga natija yuboriladi (hujjat/sirpanishdan himoya natijani
         # yashiradi yoki soxtalashtiradi)
@@ -629,7 +629,8 @@ class GameEngine:
                     continue
                 await self.bot.send_message(
                     checker_id,
-                    f"🔍 Tekshiruv natijasi: {target.name} — {target.role.team.value.upper()} jamoasidan.",
+                    f"🔍 Tekshiruv natijasi: {target.name} — {target.role.emoji} <b>{target.role.name}</b> "
+                    f"({target.role.team.value.upper()} jamoasidan).",
                 )
             except Exception:
                 pass
@@ -638,7 +639,7 @@ class GameEngine:
             await self.bot.send_message(self.chat_id, await self._build_night_deaths_text(died))
             await self._process_succession(died)
             for d in died:
-                await self._handle_elimination_last_words(d, killed_at_night=True)
+                self._schedule_last_words(d, killed_at_night=True)
         else:
             await self.bot.send_message(self.chat_id, t("trust_message", self.lang))
         if killed_back_attackers:
@@ -800,7 +801,7 @@ class GameEngine:
                         t("player_hanged", self.lang, name=mention(nominee.user_id, nominee.name), role_emoji=nominee.role.emoji, role_name=nominee.role.name),
                     )
                 await self._process_succession([nominee])
-                await self._handle_elimination_last_words(nominee, killed_at_night=False)
+                self._schedule_last_words(nominee, killed_at_night=False)
 
         self.current_nominee = None
 
@@ -929,6 +930,14 @@ class GameEngine:
     # -------------------------------------------------------------------
     # OXIRGI SO'Z (endi guruhda emas — o'yinchining botdagi shaxsiy chatida yoziladi)
     # -------------------------------------------------------------------
+    def _schedule_last_words(self, player: PlayerState, killed_at_night: bool):
+        """`_handle_elimination_last_words`ni FONDA (background task) ishga tushiradi.
+        MUHIM TUZATISH: oldin bu funksiya `await` qilinardi, shu sabab kun (yoki keyingi
+        tun) o'lgan o'yinchi oxirgi so'zini yozib bo'lguncha (yoki LAST_WORDS_SECONDS vaqt
+        o'tguncha) BOSHLANMAY turardi. Endi kun/tun darhol davom etadi, oxirgi so'z esa
+        orqa fonda kutib turiladi va kelib tushsa, kun DAVOMIDA guruhga yuboriladi."""
+        asyncio.create_task(self._handle_elimination_last_words(player, killed_at_night))
+
     async def _handle_elimination_last_words(self, player: PlayerState, killed_at_night: bool):
         from handlers.group.registration import LAST_WORDS_LISTENERS
         from utils.helpers import mention
@@ -946,20 +955,25 @@ class GameEngine:
             self.chat_id, t("last_words_wait_group", self.lang, name=mention(player.user_id, player.name))
         )
 
-        words = "..."
+        words = None
         if dm_sent:
             future = asyncio.get_event_loop().create_future()
             LAST_WORDS_LISTENERS[player.user_id] = future
             try:
                 words = await asyncio.wait_for(future, timeout=LAST_WORDS_SECONDS)
             except asyncio.TimeoutError:
-                words = "..."
+                words = None
             finally:
                 LAST_WORDS_LISTENERS.pop(player.user_id, None)
 
-        await self.bot.send_message(
-            self.chat_id, t("last_words_announced", self.lang, name=mention(player.user_id, player.name), words=words)
-        )
+        # MUHIM TUZATISH: agar o'yinchi hech narsa yozmagan bo'lsa (vaqt tugagan yoki
+        # DM yuborib bo'lmagan), ENDI hech qanday "..." degan soxta xabar yuborilmaydi -
+        # faqat HAQIQATAN yozilgan bo'lsa, guruhga e'lon qilinadi.
+        if words:
+            await self.bot.send_message(
+                self.chat_id,
+                t("last_words_announced", self.lang, name=mention(player.user_id, player.name), words=words),
+            )
 
     # -------------------------------------------------------------------
     # O'YIN TUGASHI
