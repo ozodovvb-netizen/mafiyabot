@@ -109,6 +109,9 @@ class User(Base):
     faol_rol_on: Mapped[bool] = mapped_column(Boolean, default=True)  # "Faol rol - ON/OFF"
 
     active_hero_id: Mapped[int | None] = mapped_column(ForeignKey("heroes.id"), nullable=True)
+    reserved_role_id: Mapped[int | None] = mapped_column(ForeignKey("roles.id"), nullable=True)
+    # Do'kondan sotib olingan, KEYINGI o'yinda ushbu foydalanuvchiga majburiy beriladigan rol
+    # ("Faol rol"). O'yin boshlanganda ishlatiladi (yoki ishlatilmasa ham) va tozalanadi.
 
     wins: Mapped[int] = mapped_column(Integer, default=0)
     total_games: Mapped[int] = mapped_column(Integer, default=0)
@@ -122,6 +125,7 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     active_hero = relationship("Hero", foreign_keys=[active_hero_id])
+    reserved_role = relationship("Role", foreign_keys=[reserved_role_id])
 
     def get_qty(self, protection: ProtectionType) -> int:
         return getattr(self, f"{protection.value}_qty")
@@ -202,6 +206,13 @@ class Role(Base):
     # Agar to'ldirilgan bo'lsa: shu ustunda ko'rsatilgan ID'dagi rol egasi o'lganda,
     # shu rolni ushlab turgan (agar tirik bo'lsa) o'sha rolni MEROS OLIB, unga aylanadi
     # (masalan Serjant -> Komissar o'lganda Komissarga aylanadi).
+    acts_independently: Mapped[bool] = mapped_column(Boolean, default=False)
+    # True bo'lsa: bu rol tunda O'Z NISHONINI o'zi tanlaydi va o'ldiradi - hatto bir xil
+    # jamoada (masalan mafiya) bo'lsa ham, "boshliq" (Don) qaroriga BOG'LIQ EMAS va
+    # boshqa jamoadoshlar bilan konsensusga qo'shilmaydi (masalan Qotil).
+    price_diamond: Mapped[int] = mapped_column(Integer, default=0)
+    # 0 = do'kondan sotib olinmaydi. 0 dan katta bo'lsa - foydalanuvchi shuncha olmosga
+    # ushbu rolni "band qilib" (reserve) qo'ya oladi va KEYINGI o'yinda shu rolda o'ynaydi.
 
 
 # ---------------------------------------------------------------------------

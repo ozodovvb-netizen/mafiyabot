@@ -46,6 +46,9 @@ async def adm_shop_delete(callback: CallbackQuery):
 
 @router.callback_query(F.data == "adm_shop:add")
 async def adm_shop_add_start(callback: CallbackQuery, state: FSMContext):
+    if not await is_user_admin(callback.from_user.id):
+        await callback.answer()
+        return
     await state.set_state(AdminShopItem.waiting_name)
     await callback.message.edit_text("📝 Buyum nomini kiriting (masalan: Bronjilet):", reply_markup=back_admin_kb("adm:shop"))
     await callback.answer()
@@ -53,6 +56,8 @@ async def adm_shop_add_start(callback: CallbackQuery, state: FSMContext):
 
 @router.message(AdminShopItem.waiting_name)
 async def adm_shop_name(message: Message, state: FSMContext):
+    if not await is_user_admin(message.from_user.id):
+        return
     await state.update_data(name=message.text.strip())
     await state.set_state(AdminShopItem.waiting_protection_type)
     await message.answer("🛡 Bu buyum nimadan himoya qiladi? Turini tanlang:", reply_markup=protection_type_select_kb())
@@ -60,6 +65,9 @@ async def adm_shop_name(message: Message, state: FSMContext):
 
 @router.callback_query(AdminShopItem.waiting_protection_type, F.data.startswith("protection_type:"))
 async def adm_shop_protection_type(callback: CallbackQuery, state: FSMContext):
+    if not await is_user_admin(callback.from_user.id):
+        await callback.answer()
+        return
     p_type = callback.data.split(":", 1)[1]
     await state.update_data(protection_type=p_type)
     await state.set_state(AdminShopItem.waiting_description)
@@ -71,6 +79,8 @@ async def adm_shop_protection_type(callback: CallbackQuery, state: FSMContext):
 
 @router.message(AdminShopItem.waiting_description)
 async def adm_shop_description(message: Message, state: FSMContext):
+    if not await is_user_admin(message.from_user.id):
+        return
     await state.update_data(description=message.text.strip())
     await state.set_state(AdminShopItem.waiting_price_money)
     await message.answer("💵 Narxini Dollarda kiriting (agar Olmosda sotilsa 0 yozing):")
@@ -78,6 +88,8 @@ async def adm_shop_description(message: Message, state: FSMContext):
 
 @router.message(AdminShopItem.waiting_price_money)
 async def adm_shop_price_money(message: Message, state: FSMContext):
+    if not await is_user_admin(message.from_user.id):
+        return
     if not message.text.strip().isdigit():
         await message.answer("❌ Faqat raqam yuboring.")
         return
@@ -88,6 +100,8 @@ async def adm_shop_price_money(message: Message, state: FSMContext):
 
 @router.message(AdminShopItem.waiting_price_diamond)
 async def adm_shop_price_diamond(message: Message, state: FSMContext):
+    if not await is_user_admin(message.from_user.id):
+        return
     if not message.text.strip().isdigit():
         await message.answer("❌ Faqat raqam yuboring.")
         return
@@ -102,6 +116,8 @@ async def adm_shop_price_diamond(message: Message, state: FSMContext):
 
 @router.message(AdminShopItem.waiting_category)
 async def adm_shop_category(message: Message, state: FSMContext):
+    if not await is_user_admin(message.from_user.id):
+        return
     category = message.text.strip().lower().strip("'\"“”‘’")
     if category not in ("himoya", "qurol", "umumiy"):
         await message.answer("❌ Faqat himoya, qurol yoki umumiy deb yozing (qo'shtirnoqsiz).")

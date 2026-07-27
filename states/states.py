@@ -41,8 +41,17 @@ class AdminRole(StatesGroup):
     waiting_description = State()
     waiting_max_per_game = State()
     waiting_is_boss = State()
+    waiting_independent = State()
     waiting_dual_action = State()
     waiting_succeeds = State()
+    waiting_price = State()
+
+
+class AdminRoleEdit(StatesGroup):
+    waiting_max = State()
+    waiting_price = State()
+    waiting_mode = State()
+    waiting_desc = State()
 
 
 class AdminGameMode(StatesGroup):

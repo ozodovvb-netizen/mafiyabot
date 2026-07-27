@@ -42,6 +42,9 @@ async def adm_rewards_show(callback: CallbackQuery):
 
 @router.callback_query(F.data == "adm_rewards:edit")
 async def adm_rewards_edit_start(callback: CallbackQuery, state: FSMContext):
+    if not await is_user_admin(callback.from_user.id):
+        await callback.answer()
+        return
     await state.set_state(AdminRewardSettings.waiting_winner_money)
     await callback.message.edit_text("🥇 G'olibga necha Dollar berilsin?", reply_markup=back_admin_kb("adm:rewards"))
     await callback.answer()
@@ -49,6 +52,8 @@ async def adm_rewards_edit_start(callback: CallbackQuery, state: FSMContext):
 
 @router.message(AdminRewardSettings.waiting_winner_money)
 async def adm_rewards_winner_money(message: Message, state: FSMContext):
+    if not await is_user_admin(message.from_user.id):
+        return
     if not message.text.strip().isdigit():
         await message.answer("❌ Faqat raqam yuboring.")
         return
@@ -59,6 +64,8 @@ async def adm_rewards_winner_money(message: Message, state: FSMContext):
 
 @router.message(AdminRewardSettings.waiting_winner_diamond)
 async def adm_rewards_winner_diamond(message: Message, state: FSMContext):
+    if not await is_user_admin(message.from_user.id):
+        return
     if not message.text.strip().isdigit():
         await message.answer("❌ Faqat raqam yuboring.")
         return
@@ -69,6 +76,8 @@ async def adm_rewards_winner_diamond(message: Message, state: FSMContext):
 
 @router.message(AdminRewardSettings.waiting_loser_money)
 async def adm_rewards_loser_money(message: Message, state: FSMContext):
+    if not await is_user_admin(message.from_user.id):
+        return
     if not message.text.strip().isdigit():
         await message.answer("❌ Faqat raqam yuboring.")
         return
@@ -79,6 +88,8 @@ async def adm_rewards_loser_money(message: Message, state: FSMContext):
 
 @router.message(AdminRewardSettings.waiting_loser_diamond)
 async def adm_rewards_loser_diamond(message: Message, state: FSMContext):
+    if not await is_user_admin(message.from_user.id):
+        return
     if not message.text.strip().isdigit():
         await message.answer("❌ Faqat raqam yuboring.")
         return
@@ -110,6 +121,8 @@ async def adm_username_start(callback: CallbackQuery, state: FSMContext):
 
 @router.message(AdminAdminUsername.waiting_username)
 async def adm_username_save(message: Message, state: FSMContext):
+    if not await is_user_admin(message.from_user.id):
+        return
     await crud.set_setting("admin_username", message.text.strip())
     await state.clear()
     await message.answer("✅ Admin username yangilandi!", reply_markup=back_admin_kb())
@@ -132,6 +145,8 @@ async def adm_card_start(callback: CallbackQuery, state: FSMContext):
 
 @router.message(AdminCardNumber.waiting_card)
 async def adm_card_save(message: Message, state: FSMContext):
+    if not await is_user_admin(message.from_user.id):
+        return
     await crud.set_setting("payment_card_number", message.text.strip())
     await state.clear()
     await message.answer("✅ Karta raqami yangilandi!", reply_markup=back_admin_kb())
@@ -188,6 +203,10 @@ async def adm_admin_add_start(callback: CallbackQuery, state: FSMContext):
 
 @router.message(AdminAddAdmin.waiting_user_id)
 async def adm_admin_add_save(message: Message, state: FSMContext):
+    # MUHIM: bu ADMIN QO'SHISH funksiyasi - faqat bosh admin (SUPER_ADMINS) bajara oladi,
+    # oddiy is_user_admin (DB'dagi har qanday admin) yetarli emas.
+    if message.from_user.id not in SUPER_ADMINS:
+        return
     if not message.text.strip().isdigit():
         await message.answer("❌ Faqat raqam (ID) yuboring.")
         return

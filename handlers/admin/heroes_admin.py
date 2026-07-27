@@ -41,6 +41,9 @@ async def adm_hero_delete(callback: CallbackQuery):
 
 @router.callback_query(F.data == "adm_hero:add")
 async def adm_hero_add_start(callback: CallbackQuery, state: FSMContext):
+    if not await is_user_admin(callback.from_user.id):
+        await callback.answer()
+        return
     await state.set_state(AdminHero.waiting_name)
     await callback.message.edit_text("📝 Geroy nomini kiriting:", reply_markup=back_admin_kb("adm:heroes"))
     await callback.answer()
@@ -48,6 +51,8 @@ async def adm_hero_add_start(callback: CallbackQuery, state: FSMContext):
 
 @router.message(AdminHero.waiting_name)
 async def adm_hero_name(message: Message, state: FSMContext):
+    if not await is_user_admin(message.from_user.id):
+        return
     await state.update_data(name=message.text.strip())
     await state.set_state(AdminHero.waiting_abilities)
     await message.answer("💪 Geroy o'yin davomida nimalar qila olishini yozing:")
@@ -55,6 +60,8 @@ async def adm_hero_name(message: Message, state: FSMContext):
 
 @router.message(AdminHero.waiting_abilities)
 async def adm_hero_abilities(message: Message, state: FSMContext):
+    if not await is_user_admin(message.from_user.id):
+        return
     await state.update_data(abilities_text=message.text.strip())
     await state.set_state(AdminHero.waiting_protection_text)
     await message.answer("🛡 Geroy nimalardan himoya qila olishini yozing:")
@@ -62,6 +69,8 @@ async def adm_hero_abilities(message: Message, state: FSMContext):
 
 @router.message(AdminHero.waiting_protection_text)
 async def adm_hero_protection(message: Message, state: FSMContext):
+    if not await is_user_admin(message.from_user.id):
+        return
     await state.update_data(protection_text=message.text.strip())
     await state.set_state(AdminHero.waiting_price_diamond)
     await message.answer("💎 Narxini Olmosda kiriting:")
@@ -69,6 +78,8 @@ async def adm_hero_protection(message: Message, state: FSMContext):
 
 @router.message(AdminHero.waiting_price_diamond)
 async def adm_hero_price_diamond(message: Message, state: FSMContext):
+    if not await is_user_admin(message.from_user.id):
+        return
     if not message.text.strip().isdigit():
         await message.answer("❌ Faqat raqam yuboring.")
         return
@@ -79,6 +90,8 @@ async def adm_hero_price_diamond(message: Message, state: FSMContext):
 
 @router.message(AdminHero.waiting_price_stars)
 async def adm_hero_price_stars(message: Message, state: FSMContext):
+    if not await is_user_admin(message.from_user.id):
+        return
     if not message.text.strip().isdigit():
         await message.answer("❌ Faqat raqam yuboring.")
         return

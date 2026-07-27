@@ -131,6 +131,7 @@ TEXTS: dict[str, dict[str, str]] = {
             "🎯 G'alabalar: {wins}\n"
             "🎮 Jami o'yinlar: {total_games}\n\n"
             "🎭 Faol rollar: {active_role}\n"
+            "🎲 Keyingi o'yin uchun band rol: {reserved_role}\n"
             "❤️ Sizning juftingiz: {partner}\n\n"
             "🎉 {news_channel} kanalga obuna bo'lsangiz yutuqdan 4x mukofot olasiz! "
             "VIP bo'lsangiz 10x!"
@@ -152,6 +153,7 @@ TEXTS: dict[str, dict[str, str]] = {
             "🎯 Победы: {wins}\n"
             "🎮 Всего игр: {total_games}\n\n"
             "🎭 Активная роль: {active_role}\n"
+            "🎲 Роль на следующую игру: {reserved_role}\n"
             "❤️ Ваш партнёр: {partner}\n\n"
             "🎉 Подпишитесь на {news_channel} и получите 4x награду за победу! VIP — 10x!"
         ),
@@ -172,6 +174,7 @@ TEXTS: dict[str, dict[str, str]] = {
             "🎯 Wins: {wins}\n"
             "🎮 Total games: {total_games}\n\n"
             "🎭 Active role: {active_role}\n"
+            "🎲 Role reserved for next game: {reserved_role}\n"
             "❤️ Your partner: {partner}\n\n"
             "🎉 Subscribe to {news_channel} to get 4x reward on win! VIP gets 10x!"
         ),
@@ -679,6 +682,34 @@ TEXTS: dict[str, dict[str, str]] = {
         "uz": "🔁 {old_role} o'ldi. Siz uning o'rnini bosib, endi <b>{new_role}</b> bo'ldingiz!",
         "ru": "🔁 {old_role} погиб. Вы заняли его место и теперь вы <b>{new_role}</b>!",
         "en": "🔁 {old_role} has died. You have taken their place and are now <b>{new_role}</b>!",
+    },
+    "doctor_heal_success": {
+        "uz": "💊 Siz {name} ni davoladingiz — bu kecha uni o'ldirmoqchi bo'lishdi, lekin siz uni qutqarib qoldingiz!",
+        "ru": "💊 Вы вылечили {name} — этой ночью его(её) пытались убить, но вы его(её) спасли!",
+        "en": "💊 You treated {name} — someone tried to kill them tonight, but you saved them!",
+    },
+    "doctor_heal_no_attack": {
+        "uz": "💊 Siz {name} ni davoladingiz, lekin unga hech kim tegmadi — sizning yordamingiz shart bo'lmadi.",
+        "ru": "💊 Вы вылечили {name}, но на него(неё) никто не нападал — ваша помощь не понадобилась.",
+        "en": "💊 You treated {name}, but no one attacked them — your help wasn't needed.",
+    },
+    "doctor_visited_you": {
+        "uz": "🏠 Bu kecha sizga doktor mehmonga keldi.",
+        "ru": "🏠 Этой ночью к вам в гости приходил доктор.",
+        "en": "🏠 A doctor came to visit you tonight.",
+    },
+    "fake_doc_used_on_you": {
+        "uz": "📄 {checker_role} sizni tekshirdi, lekin siz soxta hujjat ko'rsatdingiz!",
+        "ru": "📄 {checker_role} проверил(а) вас, но вы показали поддельный документ!",
+        "en": "📄 {checker_role} checked you, but you showed a fake document!",
+    },
+    "team_peaceful": {
+        "uz": "TINCH AHOLI", "ru": "МИРНЫЕ ЖИТЕЛИ", "en": "PEACEFUL",
+    },
+    "hang_protection_used": {
+        "uz": "🛡 {name} osishdan himoya ishlatdi va osilmay qoldi!",
+        "ru": "🛡 {name} использовал(а) защиту от повешения и не был(а) повешен(а)!",
+        "en": "🛡 {name} used protection from hanging and was not hanged!",
     },
 }
 

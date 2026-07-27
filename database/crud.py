@@ -327,7 +327,10 @@ async def get_roles(active_only: bool = True, mode: str | None = None) -> list[R
         if active_only:
             q = q.where(Role.is_active == True)  # noqa: E712
         if mode:
-            q = q.where(Role.mode == mode)
+            # func.lower() bilan solishtiramiz -- aks holda admin rol qo'shganda mode
+            # matnini (masalan "Classic" o'rniga "classic") biroz boshqacha yozsa, bu rol
+            # HECH QACHON o'yinga tanlanmay, sababsiz "hamma tinch aholi" bo'lib chiqishi mumkin.
+            q = q.where(func.lower(Role.mode) == mode.strip().lower())
         res = await s.execute(q)
         return list(res.scalars().all())
 
@@ -337,10 +340,94 @@ async def get_role(role_id: int) -> Role | None:
         return await s.get(Role, role_id)
 
 
+async def get_purchasable_roles() -> list[Role]:
+    """Do'kondan sotib olish mumkin bo'lgan (price_diamond > 0) faol rollar ro'yxati."""
+    async with async_session() as s:
+        res = await s.execute(
+            select(Role).where(Role.is_active == True, Role.price_diamond > 0).order_by(Role.priority)  # noqa: E712
+        )
+        return list(res.scalars().all())
+
+
+async def reserve_role(user_id: int, role_id: int) -> str:
+    """Foydalanuvchi rolni olmosga sotib olib, KEYINGI o'yin uchun band qiladi.
+    Bir nechta foydalanuvchi bir xil rolni sotib olishi/band qilishi mumkin
+    (masalan hammasi "Don"ni tanlashi mumkin) — bu yerda cheklanmaydi. Amalda
+    kim o'sha o'yinda shu roldan foydalanishi (max_per_game chegarasi) o'yin
+    boshlanganda, game/roles_logic.py -> assign_roles() ichida hal qilinadi:
+    bitta o'yinda faqat max_per_game tagacha kishi o'z band qilgan rolini
+    oladi, qolganlari esa oddiy tasodifiy taqsimotga tushadi.
+    Qaytaradi: "ok" | "not_found" | "not_purchasable" | "insufficient" | "already_reserved" """
+    async with async_session() as s:
+        role = await s.get(Role, role_id)
+        if not role or not role.is_active:
+            return "not_found"
+        if role.price_diamond <= 0:
+            return "not_purchasable"
+        user = await s.get(User, user_id)
+        if not user:
+            return "insufficient"
+        if user.reserved_role_id == role.id:
+            # Foydalanuvchi bu rolni allaqachon band qilgan — qayta bosilsa ham
+            # ikkinchi marta olmos yechilmasligi kerak.
+            return "already_reserved"
+        if user.diamonds < role.price_diamond:
+            return "insufficient"
+        user.diamonds -= role.price_diamond
+        user.reserved_role_id = role.id
+        await s.commit()
+        return "ok"
+
+
+async def count_role_reservations(role_id: int) -> int:
+    """Hozirda ushbu rolni "Faol rol" sifatida band qilib turgan foydalanuvchilar soni
+    (faqat ma'lumot sifatida ko'rsatish uchun - sotib olishni cheklamaydi)."""
+    async with async_session() as s:
+        res = await s.execute(
+            select(func.count()).select_from(User).where(User.reserved_role_id == role_id)
+        )
+        return res.scalar() or 0
+
+
+async def clear_reserved_role(user_id: int):
+    async with async_session() as s:
+        user = await s.get(User, user_id)
+        if user:
+            user.reserved_role_id = None
+            await s.commit()
+
+
+async def get_reserved_roles(user_ids: list[int]) -> dict[int, Role]:
+    """Berilgan o'yinchilardan qaysilari "Faol rol" band qilganini {user_id: Role} qilib qaytaradi."""
+    if not user_ids:
+        return {}
+    async with async_session() as s:
+        res = await s.execute(select(User).where(User.id.in_(user_ids), User.reserved_role_id.isnot(None)))
+        users = res.scalars().all()
+        result: dict[int, Role] = {}
+        for u in users:
+            role = await s.get(Role, u.reserved_role_id)
+            if role and role.is_active:
+                result[u.id] = role
+        return result
+
+
 async def create_role(**kwargs) -> Role:
     async with async_session() as s:
         role = Role(**kwargs)
         s.add(role)
+        await s.commit()
+        await s.refresh(role)
+        return role
+
+
+async def update_role(role_id: int, **kwargs) -> Role | None:
+    async with async_session() as s:
+        role = await s.get(Role, role_id)
+        if not role:
+            return None
+        for key, value in kwargs.items():
+            setattr(role, key, value)
         await s.commit()
         await s.refresh(role)
         return role

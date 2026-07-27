@@ -128,6 +128,19 @@ class GameEngine:
     # -------------------------------------------------------------------
     # O'YINNI BOSHLASH
     # -------------------------------------------------------------------
+    async def _collect_preassigned_roles(self) -> dict:
+        """Do'kondan "Faol rol" sifatida band qilingan (sotib olingan) rollarni yig'adi
+        va shu bilan birga har bir o'yinchining bandligini tozalaydi (bir martalik -
+        faqat KEYINGI o'yinda ishlaydi, keyin qayta ishlatilmasligi uchun)."""
+        user_ids = list(self.players.keys())
+        reserved = await crud.get_reserved_roles(user_ids)
+        for uid in user_ids:
+            try:
+                await crud.clear_reserved_role(uid)
+            except Exception:
+                pass
+        return reserved
+
     async def start_game(self, force: bool = False):
         if not force and len(self.players) < MIN_PLAYERS:
             await self.bot.send_message(self.chat_id, t("not_enough_players", self.lang))
@@ -149,7 +162,7 @@ class GameEngine:
             ACTIVE_GAMES.pop(self.chat_id, None)
             return
 
-        assignment = assign_roles(list(self.players.keys()), roles)
+        assignment = assign_roles(list(self.players.keys()), roles, preassigned=await self._collect_preassigned_roles())
         for uid, role in assignment.items():
             self.players[uid].role = role
             db_role_id = role.id if role.id and role.id > 0 else None
@@ -464,6 +477,7 @@ class GameEngine:
     async def _resolve_night_actions(self):
         # Kim o'ldirilmoqchi ekanini aniqlaymiz
         heal_targets: set[int] = set()
+        heal_entries: list[tuple[int, int]] = []  # (doctor_id, target_id)
         checked_info: list[tuple[int, int]] = []  # (checker_id, target_id)
         kill_entries: list[tuple[int, int, str]] = []  # (actor_id, target_id, team)
 
@@ -474,9 +488,10 @@ class GameEngine:
             # Dual (Tekshirish/Otish) rol bo'lsa, shu kechagi tanlangan turi ishlatiladi
             action = self.night_action_mode.get(actor_id, actor.role.night_action_type)
             if action == NightActionType.kill:
-                kill_entries.append((actor_id, target_id, actor.role.team.value))
+                kill_entries.append((actor_id, target_id, actor.role.team.value, actor.role.acts_independently))
             elif action == NightActionType.heal or action == NightActionType.protect:
                 heal_targets.add(target_id)
+                heal_entries.append((actor_id, target_id))
             elif action == NightActionType.check:
                 checked_info.append((actor_id, target_id))
 
@@ -485,10 +500,14 @@ class GameEngine:
         # harakat qilmagan bo'lsa - ko'pchilik tanlagan nishon olinadi. Yakka harakat
         # qiluvchilar (yakkalar, yoki yagona a'zoli jamoa) - har biri mustaqil ishlaydi.
         by_team: dict[str, list[tuple[int, int]]] = {}
-        for actor_id, target_id, team_key in kill_entries:
+        kill_targets: list[int] = []
+        for actor_id, target_id, team_key, independent in kill_entries:
+            if independent:
+                # Masalan Qotil - mafiya jamoasida hisoblansa ham, konsensusga qo'shilmaydi
+                kill_targets.append(target_id)
+                continue
             by_team.setdefault(team_key, []).append((actor_id, target_id))
 
-        kill_targets: list[int] = []
         for team_key, entries in by_team.items():
             if team_key != "mafia" or len(entries) < 2:
                 kill_targets.extend(tid for _, tid in entries)
@@ -501,6 +520,26 @@ class GameEngine:
             else:
                 counts = Counter(tid for _, tid in entries)
                 kill_targets.append(counts.most_common(1)[0][0])
+
+        # Doktorga (yoki himoyalovchi rolga) va davolangan odamga natija haqida xabar
+        attacked_heal_targets = set(kill_targets) & heal_targets
+        for doctor_id, target_id in heal_entries:
+            target = self.players.get(target_id)
+            if not target:
+                continue
+            try:
+                if target_id in attacked_heal_targets:
+                    await self.bot.send_message(
+                        doctor_id, t("doctor_heal_success", self.lang, name=mention(target.user_id, target.name))
+                    )
+                    if doctor_id != target_id:
+                        await self.bot.send_message(target_id, t("doctor_visited_you", self.lang))
+                else:
+                    await self.bot.send_message(
+                        doctor_id, t("doctor_heal_no_attack", self.lang, name=mention(target.user_id, target.name))
+                    )
+            except Exception:
+                pass
 
         died = []
         killed_back_attackers = []
@@ -575,11 +614,18 @@ class GameEngine:
                     )
                     continue
                 if await crud.consume_protection(target_id, ProtectionType.hujjat):
-                    fake_team = random.choice([tm for tm in ("peaceful", "mafia", "solo") if tm != target.role.team.value])
                     await self.bot.send_message(
                         checker_id,
-                        f"🔍 Tekshiruv natijasi: {target.name} — {fake_team.upper()} jamoasidan.",
+                        f"🔍 Tekshiruv natijasi: {target.name} — {t('team_peaceful', self.lang)}.",
                     )
+                    try:
+                        checker = self.players.get(checker_id)
+                        checker_role = f"{checker.role.emoji} {checker.role.name}" if checker and checker.role else "?"
+                        await self.bot.send_message(
+                            target_id, t("fake_doc_used_on_you", self.lang, checker_role=checker_role)
+                        )
+                    except Exception:
+                        pass
                     continue
                 await self.bot.send_message(
                     checker_id,
@@ -601,19 +647,18 @@ class GameEngine:
     async def _process_succession(self, deceased: list):
         """Agar o'lgan o'yinchining rolini "meros qilib olishi" belgilangan (succeeds_role_id)
         tirik o'yinchi bo'lsa - o'sha o'yinchi o'lgan kishining rolini oladi (masalan
-        Serjant -> Komissar o'lganda Komissarga aylanadi)."""
+        Serjant -> Komissar o'lganda Komissarga aylanadi). Agar o'lgan rol jamoa
+        "boshlig'i" (masalan Don) bo'lib, aniq belgilangan vorisi bo'lmasa - o'sha
+        jamoadan tasodifiy tirik a'zo yangi boshliq bo'lib qoladi."""
         for dead in deceased:
             if not dead.role or not dead.role.id:
                 continue
+            promoted = False
             for p in self.alive_players():
                 if p.role and p.role.succeeds_role_id == dead.role.id:
                     old_role_label = f"{dead.role.emoji} {dead.role.name}"
                     new_role = dead.role
                     p.role = new_role
-                    try:
-                        await self._save_player_role(p.user_id, new_role.id if new_role.id and new_role.id > 0 else None)
-                    except Exception:
-                        pass
                     try:
                         await self.bot.send_message(
                             p.user_id,
@@ -621,7 +666,25 @@ class GameEngine:
                         )
                     except Exception:
                         pass
+                    promoted = True
                     break  # bitta merosxo'r yetarli
+
+            if not promoted and dead.role.is_team_boss:
+                teammates = [
+                    p for p in self.alive_players()
+                    if p.role and p.role.team == dead.role.team and p.user_id != dead.user_id
+                ]
+                if teammates:
+                    new_boss = random.choice(teammates)
+                    old_role_of_new_boss = new_boss.role
+                    new_boss.role = dead.role
+                    try:
+                        await self.bot.send_message(
+                            new_boss.user_id,
+                            t("succession_promoted", self.lang, old_role=f"{old_role_of_new_boss.emoji} {old_role_of_new_boss.name}", new_role=f"{dead.role.emoji} {dead.role.name}"),
+                        )
+                    except Exception:
+                        pass
 
     def _find_kill_attacker(self, target_id: int) -> int | None:
         """Shu tunda `target_id` ga qarshi 'kill' harakati qilgan birinchi actor_id ni topadi."""

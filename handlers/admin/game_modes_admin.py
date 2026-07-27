@@ -74,6 +74,8 @@ async def adm_mode_add_start(callback: CallbackQuery, state: FSMContext):
 
 @router.message(AdminGameMode.waiting_name)
 async def adm_mode_name(message: Message, state: FSMContext):
+    if not await is_user_admin(message.from_user.id):
+        return
     await state.update_data(name=message.text.strip().lower())
     await state.set_state(AdminGameMode.waiting_min_players)
     await message.answer("👥 Bu rejim uchun eng kam o'yinchi soni nechta?")
@@ -81,6 +83,8 @@ async def adm_mode_name(message: Message, state: FSMContext):
 
 @router.message(AdminGameMode.waiting_min_players)
 async def adm_mode_min(message: Message, state: FSMContext):
+    if not await is_user_admin(message.from_user.id):
+        return
     if not message.text.strip().isdigit():
         await message.answer("❌ Faqat raqam yuboring.")
         return
@@ -91,6 +95,8 @@ async def adm_mode_min(message: Message, state: FSMContext):
 
 @router.message(AdminGameMode.waiting_max_players)
 async def adm_mode_max(message: Message, state: FSMContext):
+    if not await is_user_admin(message.from_user.id):
+        return
     if not message.text.strip().isdigit():
         await message.answer("❌ Faqat raqam yuboring.")
         return

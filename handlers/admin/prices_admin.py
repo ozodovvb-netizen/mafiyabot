@@ -44,6 +44,9 @@ async def adm_money_pkg_delete(callback: CallbackQuery):
 
 @router.callback_query(F.data == "adm_money_pkg:add")
 async def adm_money_pkg_add_start(callback: CallbackQuery, state: FSMContext):
+    if not await is_user_admin(callback.from_user.id):
+        await callback.answer()
+        return
     await state.set_state(AdminMoneyPackage.waiting_money_amount)
     await callback.message.edit_text(
         "💵 Nechta Dollar berilsin? (masalan: 1000)", reply_markup=back_admin_kb("adm:money_prices")
@@ -53,6 +56,8 @@ async def adm_money_pkg_add_start(callback: CallbackQuery, state: FSMContext):
 
 @router.message(AdminMoneyPackage.waiting_money_amount)
 async def adm_money_pkg_amount(message: Message, state: FSMContext):
+    if not await is_user_admin(message.from_user.id):
+        return
     if not message.text.strip().isdigit():
         await message.answer("❌ Faqat raqam yuboring.")
         return
@@ -63,6 +68,8 @@ async def adm_money_pkg_amount(message: Message, state: FSMContext):
 
 @router.message(AdminMoneyPackage.waiting_diamond_price)
 async def adm_money_pkg_price(message: Message, state: FSMContext):
+    if not await is_user_admin(message.from_user.id):
+        return
     if not message.text.strip().isdigit():
         await message.answer("❌ Faqat raqam yuboring.")
         return
@@ -109,6 +116,9 @@ async def adm_diamond_pkg_delete(callback: CallbackQuery):
 
 @router.callback_query(F.data == "adm_diamond_pkg:add")
 async def adm_diamond_pkg_add_start(callback: CallbackQuery, state: FSMContext):
+    if not await is_user_admin(callback.from_user.id):
+        await callback.answer()
+        return
     await state.set_state(AdminDiamondPackage.waiting_price_sum)
     await callback.message.edit_text(
         "💰 Necha so'm turadi? (masalan: 5000)", reply_markup=back_admin_kb("adm:diamond_prices")
@@ -118,6 +128,8 @@ async def adm_diamond_pkg_add_start(callback: CallbackQuery, state: FSMContext):
 
 @router.message(AdminDiamondPackage.waiting_price_sum)
 async def adm_diamond_pkg_price(message: Message, state: FSMContext):
+    if not await is_user_admin(message.from_user.id):
+        return
     if not message.text.strip().isdigit():
         await message.answer("❌ Faqat raqam yuboring.")
         return
@@ -128,6 +140,8 @@ async def adm_diamond_pkg_price(message: Message, state: FSMContext):
 
 @router.message(AdminDiamondPackage.waiting_diamond_amount)
 async def adm_diamond_pkg_amount(message: Message, state: FSMContext):
+    if not await is_user_admin(message.from_user.id):
+        return
     if not message.text.strip().isdigit():
         await message.answer("❌ Faqat raqam yuboring.")
         return

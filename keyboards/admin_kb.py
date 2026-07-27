@@ -93,15 +93,79 @@ def role_team_select_kb() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
+ROLE_ACTION_LABELS = [
+    ("none", "Yo'q"), ("kill", "O'ldirish"), ("heal", "Davolash"),
+    ("check", "Tekshirish"), ("block", "Bloklash"), ("revive", "Tiriltirish"),
+    ("protect", "Himoya qilish"), ("custom", "Faqat matn (avtomatikasiz)"),
+]
+ROLE_TEAM_LABELS = [("mafia", "🔪 Mafiya"), ("peaceful", "🕊 Tinch aholi"), ("solo", "🎯 Yakka")]
+
+
 def role_action_select_kb() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    actions = [
-        ("none", "Yo'q"), ("kill", "O'ldirish"), ("heal", "Davolash"),
-        ("check", "Tekshirish"), ("block", "Bloklash"), ("revive", "Tiriltirish"),
-        ("protect", "Himoya qilish"), ("custom", "Faqat matn (avtomatikasiz)"),
-    ]
-    for code, name in actions:
+    for code, name in ROLE_ACTION_LABELS:
         builder.button(text=name, callback_data=f"role_action:{code}")
+    builder.adjust(2)
+    return builder.as_markup()
+
+
+def role_list_view_kb(items: list, back_cb: str = "adm:main") -> InlineKeyboardMarkup:
+    """Rollar ro'yxati -- bosilsa TO'G'RIDAN-TO'G'RI o'chirmaydi, balki tahrirlash/o'chirish
+    menyusini ochadi (adm_role:view:{id})."""
+    builder = InlineKeyboardBuilder()
+    for item in items:
+        builder.button(text=f"{item.emoji} {item.name}", callback_data=f"adm_role:view:{item.id}")
+    builder.button(text="➕ Qo'shish", callback_data="adm_role:add")
+    builder.button(text="↩️ Orqaga", callback_data=back_cb)
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def role_view_kb(role) -> InlineKeyboardMarkup:
+    """Bitta rolning barcha sozlamalarini ko'rsatib, har birini alohida tahrirlash imkonini beradi."""
+    builder = InlineKeyboardBuilder()
+    builder.button(text=f"⚔️ Jamoa: {role.team.value}", callback_data=f"role_edit_team_open:{role.id}")
+    builder.button(text=f"🌙 Tungi harakat: {role.night_action_type.value}", callback_data=f"role_edit_action_open:{role.id}")
+    builder.button(
+        text=f"👑 Jamoa boshlig'i: {'✅ Ha' if role.is_team_boss else '❌ Yo\'q'}",
+        callback_data=f"role_edit_toggle:{role.id}:is_team_boss",
+    )
+    builder.button(
+        text=f"🗡 Mustaqil o'ldiradi: {'✅ Ha' if role.acts_independently else '❌ Yo\'q'}",
+        callback_data=f"role_edit_toggle:{role.id}:acts_independently",
+    )
+    builder.button(
+        text=f"🔀 Tekshirish/Otish (dual): {'✅ Ha' if role.dual_check_or_kill else '❌ Yo\'q'}",
+        callback_data=f"role_edit_toggle:{role.id}:dual_check_or_kill",
+    )
+    builder.button(text=f"🔢 Bittaga soni: {role.max_per_game}", callback_data=f"role_edit_max:{role.id}")
+    builder.button(text=f"💎 Sotib olish narxi: {role.price_diamond}", callback_data=f"role_edit_price:{role.id}")
+    builder.button(text=f"🎲 Rejim: {role.mode}", callback_data=f"role_edit_mode:{role.id}")
+    builder.button(text="✍️ Tavsifni o'zgartirish", callback_data=f"role_edit_desc:{role.id}")
+    succ_label = "❌ yo'q" if not role.succeeds_role_id else "✅ belgilangan"
+    builder.button(text=f"🔁 Kimning o'rnini bosadi: {succ_label}", callback_data=f"role_edit_succ_open:{role.id}")
+    active_label = "✅ Faol" if role.is_active else "🚫 Nofaol"
+    builder.button(text=f"🔘 Holati: {active_label}", callback_data=f"role_edit_toggle:{role.id}:is_active")
+    builder.button(text="🗑 O'chirish", callback_data=f"adm_role:del:{role.id}")
+    builder.button(text="↩️ Orqaga", callback_data="adm:roles")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def role_team_edit_kb(role_id: int) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for code, label in ROLE_TEAM_LABELS:
+        builder.button(text=label, callback_data=f"role_edit_team_set:{role_id}:{code}")
+    builder.button(text="↩️ Bekor qilish", callback_data=f"adm_role:view:{role_id}")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def role_action_edit_kb(role_id: int) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for code, name in ROLE_ACTION_LABELS:
+        builder.button(text=name, callback_data=f"role_edit_action_set:{role_id}:{code}")
+    builder.button(text="↩️ Bekor qilish", callback_data=f"adm_role:view:{role_id}")
     builder.adjust(2)
     return builder.as_markup()
 

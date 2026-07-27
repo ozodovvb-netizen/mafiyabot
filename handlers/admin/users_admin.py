@@ -47,6 +47,9 @@ async def search_user_by_id(message: Message, state: FSMContext):
 
 @router.callback_query(F.data.startswith("adm:user_money_add:"))
 async def ask_money_add(callback: CallbackQuery, state: FSMContext):
+    if not await is_user_admin(callback.from_user.id):
+        await callback.answer()
+        return
     user_id = int(callback.data.split(":")[-1])
     await state.set_state(AdminUserSearch.waiting_money_amount)
     await state.update_data(target_user_id=user_id, op="add")
@@ -56,6 +59,9 @@ async def ask_money_add(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data.startswith("adm:user_money_sub:"))
 async def ask_money_sub(callback: CallbackQuery, state: FSMContext):
+    if not await is_user_admin(callback.from_user.id):
+        await callback.answer()
+        return
     user_id = int(callback.data.split(":")[-1])
     await state.set_state(AdminUserSearch.waiting_money_amount)
     await state.update_data(target_user_id=user_id, op="sub")
@@ -65,6 +71,8 @@ async def ask_money_sub(callback: CallbackQuery, state: FSMContext):
 
 @router.message(AdminUserSearch.waiting_money_amount)
 async def apply_money_change(message: Message, state: FSMContext):
+    if not await is_user_admin(message.from_user.id):
+        return
     if not message.text or not message.text.strip().lstrip("-").isdigit():
         await message.answer("❌ Faqat raqam yuboring.")
         return
@@ -83,6 +91,9 @@ async def apply_money_change(message: Message, state: FSMContext):
 
 @router.callback_query(F.data.startswith("adm:user_diamond_add:"))
 async def ask_diamond_add(callback: CallbackQuery, state: FSMContext):
+    if not await is_user_admin(callback.from_user.id):
+        await callback.answer()
+        return
     user_id = int(callback.data.split(":")[-1])
     await state.set_state(AdminUserSearch.waiting_diamond_amount)
     await state.update_data(target_user_id=user_id, op="add")
@@ -92,6 +103,9 @@ async def ask_diamond_add(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data.startswith("adm:user_diamond_sub:"))
 async def ask_diamond_sub(callback: CallbackQuery, state: FSMContext):
+    if not await is_user_admin(callback.from_user.id):
+        await callback.answer()
+        return
     user_id = int(callback.data.split(":")[-1])
     await state.set_state(AdminUserSearch.waiting_diamond_amount)
     await state.update_data(target_user_id=user_id, op="sub")
@@ -101,6 +115,8 @@ async def ask_diamond_sub(callback: CallbackQuery, state: FSMContext):
 
 @router.message(AdminUserSearch.waiting_diamond_amount)
 async def apply_diamond_change(message: Message, state: FSMContext):
+    if not await is_user_admin(message.from_user.id):
+        return
     if not message.text or not message.text.strip().lstrip("-").isdigit():
         await message.answer("❌ Faqat raqam yuboring.")
         return
@@ -119,6 +135,9 @@ async def apply_diamond_change(message: Message, state: FSMContext):
 
 @router.callback_query(F.data.startswith("adm:user_ban:"))
 async def toggle_ban(callback: CallbackQuery):
+    if not await is_user_admin(callback.from_user.id):
+        await callback.answer()
+        return
     user_id = int(callback.data.split(":")[-1])
     user = await crud.get_user(user_id)
     from database.db import async_session

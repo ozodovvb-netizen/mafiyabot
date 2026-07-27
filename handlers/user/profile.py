@@ -21,6 +21,12 @@ async def render_profile_text(user_id: int, lang: str, display_name: str) -> str
         if hero:
             active_role_name = f"{hero.emoji} {hero.name}"
 
+    reserved_role_name = t("no_role", lang)
+    if user.reserved_role_id:
+        reserved_role = await crud.get_role(user.reserved_role_id)
+        if reserved_role:
+            reserved_role_name = f"{reserved_role.emoji} {reserved_role.name}"
+
     partner_text = t("no_partner", lang)
     if user.partner_id:
         partner = await crud.get_user(user.partner_id)
@@ -44,6 +50,7 @@ async def render_profile_text(user_id: int, lang: str, display_name: str) -> str
         wins=user.wins,
         total_games=user.total_games,
         active_role=active_role_name,
+        reserved_role=reserved_role_name,
         partner=partner_text,
         news_channel=news_channel,
     )
