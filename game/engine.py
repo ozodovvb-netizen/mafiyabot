@@ -52,6 +52,7 @@ class GameEngine:
         self.players: dict[int, PlayerState] = {}
         self.day_number = 0
         self.night_actions: dict[int, int] = {}   # actor_id -> target_id
+        self._flavor_announced_roles: set = set()
         self.votes: dict[int, str] = {}            # voter_id -> "like"/"dislike"
         self.current_nominee: int | None = None
         self.lang = "uz"
@@ -223,6 +224,7 @@ class GameEngine:
         for p in self.alive_players():
             p.acted_this_cycle = False
         self.night_actions.clear()
+        self._flavor_announced_roles = set()
         night_text = t("night_started", self.lang, night_number=self.day_number)
         await self._send_phase_media("night.mp4", "night.png", night_text)
 
@@ -237,7 +239,6 @@ class GameEngine:
         await asyncio.sleep(NIGHT_SECONDS)
         if self.stopped:
             return
-        await self._announce_night_flavor()
         await self._resolve_night_actions()
 
     async def _kick_inactive_players(self):
@@ -331,35 +332,6 @@ class GameEngine:
         ],
     }
 
-    async def _announce_night_flavor(self):
-        """Kimni nishonga olganini oshkor qilmasdan, qaysi rollar harakat qilganini guruhga bildiradi."""
-        seen_roles = set()
-        lines = []
-        for actor_id in self.night_actions.keys():
-            actor = self.players.get(actor_id)
-            if not actor or not actor.role:
-                continue
-            key = actor.role.id or actor.role.name
-            if key in seen_roles:
-                continue
-            seen_roles.add(key)
-
-            custom = self.ROLE_NIGHT_FLAVOR.get(actor.role.name.strip().lower())
-            if custom:
-                lines.append(custom)
-                continue
-
-            action = actor.role.night_action_type
-            variants = self.ROLE_NIGHT_FLAVOR_BY_ACTION.get(action)
-            if variants:
-                template = random.choice(variants)
-                lines.append(template.format(role=f"{actor.role.emoji} {actor.role.name}"))
-
-        if lines:
-            for line in lines:
-                await self.bot.send_message(self.chat_id, line)
-                await asyncio.sleep(1.2)
-
     async def _send_night_action_prompt(self, actor: PlayerState):
         builder = InlineKeyboardBuilder()
         for target in self.alive_players():
@@ -376,11 +348,34 @@ class GameEngine:
         except Exception:
             pass
 
-    def register_night_action(self, actor_id: int, target_id: int):
+    async def register_night_action(self, actor_id: int, target_id: int):
         self.night_actions[actor_id] = target_id
         actor = self.players.get(actor_id)
-        if actor:
-            actor.acted_this_cycle = True
+        if not actor:
+            return
+        actor.acted_this_cycle = True
+
+        # Rol harakat qilishi bilan DARHOL guruhga xabar beramiz (kimni nishonga
+        # olgani oshkor qilinmaydi, faqat "shu rol harakat qildi" degan hikoya matni) --
+        # oldin bu hammasi tun oxirida to'planib, kech yuborilardi.
+        if not actor.role:
+            return
+        key = actor.role.id or actor.role.name
+        if key in self._flavor_announced_roles:
+            return
+        self._flavor_announced_roles.add(key)
+
+        custom = self.ROLE_NIGHT_FLAVOR.get(actor.role.name.strip().lower())
+        if custom:
+            line = custom
+        else:
+            variants = self.ROLE_NIGHT_FLAVOR_BY_ACTION.get(actor.role.night_action_type)
+            line = random.choice(variants).format(role=f"{actor.role.emoji} {actor.role.name}") if variants else None
+        if line:
+            try:
+                await self.bot.send_message(self.chat_id, line)
+            except Exception:
+                pass
 
     async def _resolve_night_actions(self):
         # Kim o'ldirilmoqchi ekanini aniqlaymiz
@@ -612,19 +607,20 @@ class GameEngine:
         alive = self.alive_players()
         numbered = "\n".join(f"{i+1}. {mention(p.user_id, p.name)}" for i, p in enumerate(alive))
 
+        # MUHIM: bu xabar GURUHGA (hammaga ochiq) yuboriladi, shuning uchun bu yerda
+        # HECH QACHON kimning qaysi jamoada/rolda ekani yozilmasligi kerak - aks holda
+        # o'yinning butun ma'nosi (rollar sirligi) yo'qoladi. Faqat jamoalar bo'yicha
+        # UMUMIY SON ko'rsatiladi (masalan "Mafiyalar - 2"), ismlar emas.
         team_labels = {"peaceful": "Tinchlar", "mafia": "Mafiyalar", "solo": "Yakkalar"}
-        grouped: dict[str, list] = {}
+        counts: dict[str, int] = {}
         for p in alive:
             key = p.role.team.value if p.role else "peaceful"
-            grouped.setdefault(key, []).append(p)
+            counts[key] = counts.get(key, 0) + 1
 
-        team_blocks = []
-        for key in ("peaceful", "mafia", "solo"):
-            members = grouped.get(key)
-            if not members:
-                continue
-            names = ", ".join(f"{p.role.emoji} {mention(p.user_id, p.name)}" for p in members)
-            team_blocks.append(f"<b>{team_labels[key]} - {len(members)}:</b>\n{names}")
+        team_blocks = [
+            f"<b>{team_labels[key]} - {counts[key]}</b>"
+            for key in ("peaceful", "mafia", "solo") if counts.get(key)
+        ]
 
         return (
             f"👥 <b>O'yinchilar ro'yxati</b>\n━━━━━━━━━━━━━━\n{numbered}\n\n"
@@ -789,14 +785,23 @@ class GameEngine:
 
         # Har bir o'yinchiga shaxsiy natija va mukofot
         winner_ids = {p.user_id for p in winners}
+        reward = await crud.get_reward_settings()
+        from handlers.user.profile import render_profile_text
         for p in self.players.values():
             won = p.user_id in winner_ids
             user = await crud.apply_game_result(p.user_id, won)
+            # MUHIM: bu yerda oldin xato ravishda foydalanuvchining BUTUN joriy balansi
+            # (user.money/user.diamonds) "sizga shuncha berildi" deb ko'rsatilardi -- shu
+            # sabab har doim "faqat 1 dollar 1 olmos beryapti" deb tuyulardi. Endi bu
+            # o'yin uchun HAQIQIY berilgan miqdor (reward sozlamalaridan) ko'rsatiladi,
+            # so'ng /profile bilan bir xil to'liq profil matni qo'shiladi.
+            delta_money = reward.winner_money if won else reward.loser_money
+            delta_diamond = reward.winner_diamond if won else reward.loser_diamond
+            key = "personal_result_won" if won else "personal_result_lost"
             try:
-                await self.bot.send_message(
-                    p.user_id,
-                    t("personal_result_won", user.language, money=user.money, diamonds=user.diamonds),
-                )
+                intro = t(key, user.language, money=delta_money, diamonds=delta_diamond)
+                profile_text = await render_profile_text(p.user_id, user.language, p.name)
+                await self.bot.send_message(p.user_id, f"{intro}\n\n{profile_text}")
             except Exception:
                 pass
 

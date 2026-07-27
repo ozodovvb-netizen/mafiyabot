@@ -640,9 +640,14 @@ TEXTS: dict[str, dict[str, str]] = {
         "en": "🎁 Winners received rewards! {news_channel} subscribers: 4x, VIP: 10x",
     },
     "personal_result_won": {
-        "uz": "🎉 O'yin tugadi.\nSizga {money} 💵, {diamonds} 💎 berildi!",
-        "ru": "🎉 Игра окончена.\nВам начислено {money} 💵, {diamonds} 💎!",
-        "en": "🎉 Game over.\nYou received {money} 💵, {diamonds} 💎!",
+        "uz": "🎉 G'alaba! Ushbu o'yin uchun +{money} 💵, +{diamonds} 💎 hisobingizga qo'shildi.",
+        "ru": "🎉 Победа! За эту игру вам начислено +{money} 💵, +{diamonds} 💎.",
+        "en": "🎉 Victory! You were awarded +{money} 💵, +{diamonds} 💎 for this game.",
+    },
+    "personal_result_lost": {
+        "uz": "😔 Mag'lubiyat. Ushbu o'yin uchun +{money} 💵, +{diamonds} 💎 hisobingizga qo'shildi.",
+        "ru": "😔 Поражение. За эту игру вам начислено +{money} 💵, +{diamonds} 💎.",
+        "en": "😔 Defeat. You were awarded +{money} 💵, +{diamonds} 💎 for this game.",
     },
 }
 
