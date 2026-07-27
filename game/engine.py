@@ -12,6 +12,7 @@ ishlatiladi va avtomatik tunda harakat qilmaydi (lekin g'alaba hisobida jamoasi 
 """
 import asyncio
 import random
+from collections import Counter
 from datetime import datetime
 
 from aiogram import Bot
@@ -52,6 +53,7 @@ class GameEngine:
         self.players: dict[int, PlayerState] = {}
         self.day_number = 0
         self.night_actions: dict[int, int] = {}   # actor_id -> target_id
+        self.night_action_mode: dict[int, "NightActionType"] = {}  # dual rol tanlagan tur (check/kill)
         self._flavor_announced_roles: set = set()
         self.votes: dict[int, str] = {}            # voter_id -> "like"/"dislike"
         self.current_nominee: int | None = None
@@ -161,7 +163,54 @@ class GameEngine:
             except Exception:
                 pass  # foydalanuvchi botni bloklagan bo'lishi mumkin
 
+        await self._reveal_teammates()
         await self.run_game_loop()
+
+    async def _reveal_teammates(self):
+        """O'yin boshlanganda: 1) bir xil jamoadagilar (masalan mafiyalar) bir-birini
+        taniydi, 2) "sheriklashgan" rollar (masalan Komissar/Serjant - biri o'lsa ikkinchisi
+        uning o'rnini bosadi) bir-biriga xabar beriladi."""
+        # 1) Jamoadoshlar (bir nechta a'zosi bo'lgan jamoalar uchun, masalan mafiya)
+        by_team: dict[str, list] = {}
+        for p in self.players.values():
+            if p.role:
+                by_team.setdefault(p.role.team.value, []).append(p)
+
+        for team_key, members in by_team.items():
+            if team_key != "mafia" or len(members) < 2:
+                continue
+            for p in members:
+                others = [m for m in members if m.user_id != p.user_id]
+                names = ", ".join(mention(m.user_id, m.name) for m in others)
+                try:
+                    await self.bot.send_message(
+                        p.user_id, t("teammates_reveal", self.lang, names=names)
+                    )
+                except Exception:
+                    pass
+
+        # 2) Sheriklashgan rollar (succeeds_role_id orqali bog'langan, masalan Serjant->Komissar)
+        role_holders: dict[int, list] = {}
+        for p in self.players.values():
+            if p.role and p.role.id:
+                role_holders.setdefault(p.role.id, []).append(p)
+
+        for p in self.players.values():
+            if not p.role or not p.role.succeeds_role_id:
+                continue
+            targets = role_holders.get(p.role.succeeds_role_id, [])
+            for target in targets:
+                try:
+                    await self.bot.send_message(
+                        p.user_id,
+                        t("succession_reveal_self", self.lang, role=f"{target.role.emoji} {target.role.name}", name=mention(target.user_id, target.name)),
+                    )
+                    await self.bot.send_message(
+                        target.user_id,
+                        t("succession_reveal_other", self.lang, role=f"{p.role.emoji} {p.role.name}", name=mention(p.user_id, p.name)),
+                    )
+                except Exception:
+                    pass
 
     async def _save_player_role(self, user_id: int, role_id: int | None):
         from database.db import async_session
@@ -224,6 +273,7 @@ class GameEngine:
         for p in self.alive_players():
             p.acted_this_cycle = False
         self.night_actions.clear()
+        self.night_action_mode.clear()
         self._flavor_announced_roles = set()
         night_text = t("night_started", self.lang, night_number=self.day_number)
         await self._send_phase_media("night.mp4", "night.png", night_text)
@@ -333,9 +383,32 @@ class GameEngine:
     }
 
     async def _send_night_action_prompt(self, actor: PlayerState):
+        if actor.role.dual_check_or_kill:
+            builder = InlineKeyboardBuilder()
+            builder.button(
+                text=t("night_action_choice_check", self.lang),
+                callback_data=f"night_mode:{self.chat_id}:check",
+            )
+            builder.button(
+                text=t("night_action_choice_kill", self.lang),
+                callback_data=f"night_mode:{self.chat_id}:kill",
+            )
+            builder.adjust(2)
+            try:
+                await self.bot.send_message(
+                    actor.user_id,
+                    t("night_action_choose_mode", self.lang, role=f"{actor.role.emoji} {actor.role.name}"),
+                    reply_markup=builder.as_markup(),
+                )
+            except Exception:
+                pass
+            return
+        await self._send_night_target_list(actor, actor.role.night_action_type)
+
+    async def _send_night_target_list(self, actor: PlayerState, action_type: "NightActionType"):
         builder = InlineKeyboardBuilder()
         for target in self.alive_players():
-            if target.user_id == actor.user_id and actor.role.night_action_type == NightActionType.kill:
+            if target.user_id == actor.user_id and action_type == NightActionType.kill:
                 continue  # o'zini o'ldira olmaydi (oddiy qoida)
             builder.button(text=target.name, callback_data=f"night_act:{self.chat_id}:{target.user_id}")
         builder.adjust(1)
@@ -369,7 +442,8 @@ class GameEngine:
         if custom:
             line = custom
         else:
-            variants = self.ROLE_NIGHT_FLAVOR_BY_ACTION.get(actor.role.night_action_type)
+            effective_action = self.night_action_mode.get(actor_id, actor.role.night_action_type)
+            variants = self.ROLE_NIGHT_FLAVOR_BY_ACTION.get(effective_action)
             line = random.choice(variants).format(role=f"{actor.role.emoji} {actor.role.name}") if variants else None
         if line:
             try:
@@ -379,21 +453,44 @@ class GameEngine:
 
     async def _resolve_night_actions(self):
         # Kim o'ldirilmoqchi ekanini aniqlaymiz
-        kill_targets: list[int] = []
         heal_targets: set[int] = set()
         checked_info: list[tuple[int, int]] = []  # (checker_id, target_id)
+        kill_entries: list[tuple[int, int, str]] = []  # (actor_id, target_id, team)
 
         for actor_id, target_id in self.night_actions.items():
             actor = self.players.get(actor_id)
             if not actor or not actor.role:
                 continue
-            action = actor.role.night_action_type
+            # Dual (Tekshirish/Otish) rol bo'lsa, shu kechagi tanlangan turi ishlatiladi
+            action = self.night_action_mode.get(actor_id, actor.role.night_action_type)
             if action == NightActionType.kill:
-                kill_targets.append(target_id)
+                kill_entries.append((actor_id, target_id, actor.role.team.value))
             elif action == NightActionType.heal or action == NightActionType.protect:
                 heal_targets.add(target_id)
             elif action == NightActionType.check:
                 checked_info.append((actor_id, target_id))
+
+        # Jamoa bo'lib harakat qiluvchilar uchun (masalan mafiyalar) - agar jamoada
+        # "boshliq" (masalan Don) bo'lsa, OXIRGI qaror shunga tegishli bo'ladi; boshliq
+        # harakat qilmagan bo'lsa - ko'pchilik tanlagan nishon olinadi. Yakka harakat
+        # qiluvchilar (yakkalar, yoki yagona a'zoli jamoa) - har biri mustaqil ishlaydi.
+        by_team: dict[str, list[tuple[int, int]]] = {}
+        for actor_id, target_id, team_key in kill_entries:
+            by_team.setdefault(team_key, []).append((actor_id, target_id))
+
+        kill_targets: list[int] = []
+        for team_key, entries in by_team.items():
+            if team_key != "mafia" or len(entries) < 2:
+                kill_targets.extend(tid for _, tid in entries)
+                continue
+            boss_entry = next(
+                ((aid, tid) for aid, tid in entries if self.players[aid].role.is_team_boss), None
+            )
+            if boss_entry:
+                kill_targets.append(boss_entry[1])
+            else:
+                counts = Counter(tid for _, tid in entries)
+                kill_targets.append(counts.most_common(1)[0][0])
 
         died = []
         killed_back_attackers = []
@@ -483,10 +580,38 @@ class GameEngine:
 
         if died:
             await self.bot.send_message(self.chat_id, await self._build_night_deaths_text(died))
+            await self._process_succession(died)
             for d in died:
                 await self._handle_elimination_last_words(d, killed_at_night=True)
         else:
             await self.bot.send_message(self.chat_id, t("trust_message", self.lang))
+        if killed_back_attackers:
+            await self._process_succession([attacker for _victim, attacker in killed_back_attackers])
+
+    async def _process_succession(self, deceased: list):
+        """Agar o'lgan o'yinchining rolini "meros qilib olishi" belgilangan (succeeds_role_id)
+        tirik o'yinchi bo'lsa - o'sha o'yinchi o'lgan kishining rolini oladi (masalan
+        Serjant -> Komissar o'lganda Komissarga aylanadi)."""
+        for dead in deceased:
+            if not dead.role or not dead.role.id:
+                continue
+            for p in self.alive_players():
+                if p.role and p.role.succeeds_role_id == dead.role.id:
+                    old_role_label = f"{dead.role.emoji} {dead.role.name}"
+                    new_role = dead.role
+                    p.role = new_role
+                    try:
+                        await self._save_player_role(p.user_id, new_role.id if new_role.id and new_role.id > 0 else None)
+                    except Exception:
+                        pass
+                    try:
+                        await self.bot.send_message(
+                            p.user_id,
+                            t("succession_promoted", self.lang, old_role=old_role_label, new_role=f"{new_role.emoji} {new_role.name}"),
+                        )
+                    except Exception:
+                        pass
+                    break  # bitta merosxo'r yetarli
 
     def _find_kill_attacker(self, target_id: int) -> int | None:
         """Shu tunda `target_id` ga qarshi 'kill' harakati qilgan birinchi actor_id ni topadi."""
@@ -494,7 +619,10 @@ class GameEngine:
             if tid != target_id:
                 continue
             actor = self.players.get(actor_id)
-            if actor and actor.role and actor.role.night_action_type == NightActionType.kill:
+            if not actor or not actor.role:
+                continue
+            action = self.night_action_mode.get(actor_id, actor.role.night_action_type)
+            if action == NightActionType.kill:
                 return actor_id
         return None
 
@@ -598,6 +726,7 @@ class GameEngine:
                         self.chat_id,
                         t("player_hanged", self.lang, name=mention(nominee.user_id, nominee.name), role_emoji=nominee.role.emoji, role_name=nominee.role.name),
                     )
+                await self._process_succession([nominee])
                 await self._handle_elimination_last_words(nominee, killed_at_night=False)
 
         self.current_nominee = None

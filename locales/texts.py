@@ -649,6 +649,37 @@ TEXTS: dict[str, dict[str, str]] = {
         "ru": "😔 Поражение. За эту игру вам начислено +{money} 💵, +{diamonds} 💎.",
         "en": "😔 Defeat. You were awarded +{money} 💵, +{diamonds} 💎 for this game.",
     },
+    "teammates_reveal": {
+        "uz": "🤝 Sizning sheriklaringiz: {names}",
+        "ru": "🤝 Ваши сообщники: {names}",
+        "en": "🤝 Your partners: {names}",
+    },
+    "succession_reveal_self": {
+        "uz": "🔁 Siz {role} ({name}) o'lsa, uning o'rnini bosasiz va {role} bo'lib qolasiz.",
+        "ru": "🔁 Если {role} ({name}) погибнет, вы займёте его место и станете {role}.",
+        "en": "🔁 If {role} ({name}) dies, you will take their place and become {role}.",
+    },
+    "succession_reveal_other": {
+        "uz": "🔁 Agar siz o'lsangiz, {name} sizning o'rningizni bosib, {role} bo'lib qoladi.",
+        "ru": "🔁 Если вы погибнете, {name} займёт ваше место и станет {role}.",
+        "en": "🔁 If you die, {name} will take your place and become {role}.",
+    },
+    "night_action_choose_mode": {
+        "uz": "🌙 {role}: bu kecha nima qilmoqchisiz?",
+        "ru": "🌙 {role}: что вы хотите сделать этой ночью?",
+        "en": "🌙 {role}: what do you want to do tonight?",
+    },
+    "night_action_choice_check": {
+        "uz": "🔍 Tekshirish", "ru": "🔍 Проверить", "en": "🔍 Investigate",
+    },
+    "night_action_choice_kill": {
+        "uz": "🔫 Otish", "ru": "🔫 Убить", "en": "🔫 Kill",
+    },
+    "succession_promoted": {
+        "uz": "🔁 {old_role} o'ldi. Siz uning o'rnini bosib, endi <b>{new_role}</b> bo'ldingiz!",
+        "ru": "🔁 {old_role} погиб. Вы заняли его место и теперь вы <b>{new_role}</b>!",
+        "en": "🔁 {old_role} has died. You have taken their place and are now <b>{new_role}</b>!",
+    },
 }
 
 

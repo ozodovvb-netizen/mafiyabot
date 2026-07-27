@@ -64,6 +64,34 @@ async def block_night_group_chat(message: Message):
         pass  # bot cheklash huquqiga ega bo'lmasligi mumkin
 
 
+@router.callback_query(F.data.startswith("night_mode:"))
+async def on_night_mode_choice(callback: CallbackQuery):
+    """Ikki tomonlama rol (masalan Komissar - Tekshirish/Otish) shu kechagi harakat
+    turini tanlaganda ishga tushadi, keyin nishon ro'yxatini yuboradi."""
+    _, chat_id_str, mode_str = callback.data.split(":")
+    chat_id = int(chat_id_str)
+    engine = ACTIVE_GAMES.get(chat_id)
+    if not engine:
+        await callback.answer("❌ O'yin allaqachon tugagan.", show_alert=True)
+        return
+    actor = engine.players.get(callback.from_user.id)
+    if not actor or not actor.role or not actor.alive:
+        await callback.answer()
+        return
+
+    from database.models import NightActionType
+    action_type = NightActionType.check if mode_str == "check" else NightActionType.kill
+    engine.night_action_mode[callback.from_user.id] = action_type
+
+    label = t("night_action_choice_check", engine.lang) if mode_str == "check" else t("night_action_choice_kill", engine.lang)
+    try:
+        await callback.message.edit_text(f"✅ {label}")
+    except Exception:
+        pass
+    await engine._send_night_target_list(actor, action_type)
+    await callback.answer()
+
+
 @router.callback_query(F.data.startswith("night_act:"))
 async def on_night_action(callback: CallbackQuery):
     _, chat_id_str, target_id_str = callback.data.split(":")

@@ -191,6 +191,18 @@ class Role(Base):
     priority: Mapped[int] = mapped_column(Integer, default=0)  # tungi harakat tartibi (kichik son oldin ishlaydi)
     mode: Mapped[str] = mapped_column(String(32), default="classic")  # bu rol qaysi o'yin rejimida ishlatiladi
 
+    # --- Rollar sheriklashuvi / maxsus xatti-harakat ---
+    is_team_boss: Mapped[bool] = mapped_column(Boolean, default=False)
+    # True bo'lsa: shu rol jamoasi (masalan mafiyalar) bir nechta a'zo tunda turli
+    # nishon tansa ham, OXIRGI QAROR shu "boshliq" (masalan Don) tanlagan nishon bo'ladi.
+    dual_check_or_kill: Mapped[bool] = mapped_column(Boolean, default=False)
+    # True bo'lsa: bu rol har kecha "Tekshirish" yoki "Otish" dan birini o'zi tanlab, keyin
+    # nishon tanlaydi (masalan Komissar - xohlasa tekshiradi, xohlasa o'ldiradi).
+    succeeds_role_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Agar to'ldirilgan bo'lsa: shu ustunda ko'rsatilgan ID'dagi rol egasi o'lganda,
+    # shu rolni ushlab turgan (agar tirik bo'lsa) o'sha rolni MEROS OLIB, unga aylanadi
+    # (masalan Serjant -> Komissar o'lganda Komissarga aylanadi).
+
 
 # ---------------------------------------------------------------------------
 # O'YIN REJIMLARI (nechta o'yinchi bo'lsa qaysi rejim avtomatik tanlanadi)

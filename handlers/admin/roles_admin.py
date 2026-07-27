@@ -107,16 +107,76 @@ async def adm_role_max(message: Message, state: FSMContext):
     if not message.text.strip().isdigit():
         await message.answer("❌ Faqat raqam yuboring.")
         return
+    await state.update_data(max_per_game=int(message.text.strip()))
+    await state.set_state(AdminRole.waiting_is_boss)
 
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    builder = InlineKeyboardBuilder()
+    builder.button(text="✅ Ha", callback_data="role_boss:1")
+    builder.button(text="❌ Yo'q", callback_data="role_boss:0")
+    builder.adjust(2)
+    await message.answer(
+        "👑 Bu rol o'z JAMOASI uchun \"boshliq\"mi? (Masalan Don - mafiyalar turlicha "
+        "nishon tansa ham, OXIRGI qaror shu rolga tegishli bo'ladi):",
+        reply_markup=builder.as_markup(),
+    )
+
+
+@router.callback_query(AdminRole.waiting_is_boss, F.data.startswith("role_boss:"))
+async def adm_role_boss(callback: CallbackQuery, state: FSMContext):
+    await state.update_data(is_team_boss=callback.data.endswith(":1"))
+    await state.set_state(AdminRole.waiting_dual_action)
+
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    builder = InlineKeyboardBuilder()
+    builder.button(text="✅ Ha", callback_data="role_dual:1")
+    builder.button(text="❌ Yo'q", callback_data="role_dual:0")
+    builder.adjust(2)
+    await callback.message.edit_text(
+        "🔀 Bu rol har kecha \"Tekshirish\" yoki \"Otish\" dan birini o'zi tanlab harakat "
+        "qiladimi? (Masalan Komissar - xohlasa tekshiradi, xohlasa o'ldiradi):",
+        reply_markup=builder.as_markup(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(AdminRole.waiting_dual_action, F.data.startswith("role_dual:"))
+async def adm_role_dual(callback: CallbackQuery, state: FSMContext):
+    await state.update_data(dual_check_or_kill=callback.data.endswith(":1"))
+    await state.set_state(AdminRole.waiting_succeeds)
+
+    roles = await crud.get_roles(active_only=False)
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    builder = InlineKeyboardBuilder()
+    builder.button(text="➖ Hech kimning o'rnini bosmaydi", callback_data="role_succ:0")
+    for r in roles:
+        builder.button(text=f"{r.emoji} {r.name}", callback_data=f"role_succ:{r.id}")
+    builder.adjust(1)
+    await callback.message.edit_text(
+        "🔁 Bu rol egasi tirik bo'lib, quyidagi rollardan biri o'lsa, uning o'rnini "
+        "bosib, o'sha rolga aylanadimi? (masalan Serjant -> Komissar o'lsa Komissarga "
+        "aylanadi). Agar bunday bo'lmasa - birinchi tugmani bosing:",
+        reply_markup=builder.as_markup(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(AdminRole.waiting_succeeds, F.data.startswith("role_succ:"))
+async def adm_role_succeeds(callback: CallbackQuery, state: FSMContext):
+    succ_id = int(callback.data.split(":")[-1])
     data = await state.get_data()
     await crud.create_role(
         name=data["name"],
         team=RoleTeam(data["team"]),
         night_action_type=NightActionType(data["action"]),
         description=data["description"],
-        max_per_game=int(message.text.strip()),
+        max_per_game=data["max_per_game"],
         mode=data.get("mode", "classic"),
+        is_team_boss=data.get("is_team_boss", False),
+        dual_check_or_kill=data.get("dual_check_or_kill", False),
+        succeeds_role_id=succ_id or None,
     )
     await state.clear()
     roles = await crud.get_roles(active_only=False)
-    await message.answer("✅ Rol qo'shildi!", reply_markup=list_with_delete_kb(roles, "adm_role"))
+    await callback.message.edit_text("✅ Rol qo'shildi!", reply_markup=list_with_delete_kb(roles, "adm_role"))
+    await callback.answer()
