@@ -28,7 +28,7 @@ async def send_start_menu(message_or_cb, lang: str, edit: bool = False):
     user_id = message_or_cb.from_user.id
     admin_username = await crud.get_setting("admin_username", "@Hackeruzbekistan001")
     text = t("start_welcome", lang, max_players=MAX_PLAYERS, admin_username=admin_username)
-    kb = start_menu_kb(lang, is_admin=await is_user_admin(user_id))
+    kb = start_menu_kb(lang, is_admin=await is_user_admin(user_id), admin_username=admin_username)
     if edit:
         await message_or_cb.message.edit_text(text, reply_markup=kb)
     else:

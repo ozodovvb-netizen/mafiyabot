@@ -75,6 +75,25 @@ async def main():
         logging.exception(
             "Update ichida qo'lga olinmagan xatolik: %s", event.exception, exc_info=event.exception
         )
+        # Ilgari xatolik faqat log fayliga yozilib, foydalanuvchiga HECH NARSA ko'rinmasdi --
+        # bu "buyruq ishlamayapti" degan taassurot qoldirardi (aslida bot bosim bilan
+        # xatolikka uchrab, jim qolib ketardi). Endi iloji boricha o'sha chatga qisqa
+        # xabar yuboramiz, shunda foydalanuvchi hech bo'lmasa bot buyruqni qabul qilganini
+        # va biror joyda xatolik chiqqanini biladi.
+        try:
+            chat = None
+            if event.update.message:
+                chat = event.update.message.chat
+            elif event.update.callback_query and event.update.callback_query.message:
+                chat = event.update.callback_query.message.chat
+            if chat:
+                await bot.send_message(
+                    chat.id,
+                    "⚠️ Kutilmagan xatolik yuz berdi. Iltimos, qayta urinib ko'ring yoki "
+                    "muammo davom etsa admin bilan bog'laning.",
+                )
+        except Exception:
+            pass
         return True
 
     # Admin routerlari (birinchi navbatda - "adm:" callbacklari ustuvor bo'lishi uchun)

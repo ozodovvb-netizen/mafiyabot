@@ -538,6 +538,39 @@ TEXTS: dict[str, dict[str, str]] = {
         "ru": "⚰️ <b>{name}</b> был(а) повешен(а) на дневном собрании!\nОн(а) был(а) {role_emoji} <b>{role_name}</b>.",
         "en": "⚰️ <b>{name}</b> was hanged at the day meeting!\nThey were {role_emoji} <b>{role_name}</b>.",
     },
+    "player_hanged_masked": {
+        "uz": "⚰️ <b>{name}</b> kunduzgi yig'ilishda osildi!\n🎭 Lekin u niqob (maska) taqqan edi — roli sir bo'lib qoldi.",
+        "ru": "⚰️ <b>{name}</b> был(а) повешен(а) на дневном собрании!\n🎭 Но на нём(ней) была маска — роль осталась тайной.",
+        "en": "⚰️ <b>{name}</b> was hanged at the day meeting!\n🎭 But they wore a mask — their role stays hidden.",
+    },
+    "protection_hanging_saved": {
+        "uz": "🪂 {name} osishdan himoyalangan edi va tirik qoldi!",
+        "ru": "🪂 {name} был(а) защищён(а) от повешения и остался(ась) жив(а)!",
+        "en": "🪂 {name} was protected from hanging and survived!",
+    },
+    "protection_saved_you": {
+        "uz": "🛡 Bu tun sizga hujum qilishdi, lekin {protection} sizni qutqarib qoldi!",
+        "ru": "🛡 Этой ночью на вас напали, но {protection} вас спасла!",
+        "en": "🛡 You were attacked tonight, but your {protection} saved you!",
+    },
+    "protection_gun_saved_you": {
+        "uz": "🔫 Bu tun sizga hujum qilishdi, lekin miltiqingiz bilan o'zingizni himoya qildingiz!",
+        "ru": "🔫 Этой ночью на вас напали, но вы защитились ружьём!",
+        "en": "🔫 You were attacked tonight, but you defended yourself with your gun!",
+    },
+    "gun_killed_attacker": {
+        "uz": "🔫 {victim} tunda hujumga uchradi, lekin miltiq bilan javob qaytardi! Hujumchi {attacker_role} {attacker} o'zi halok bo'ldi.",
+        "ru": "🔫 На {victim} напали ночью, но он(а) отбился(ась) ружьём! Нападавший {attacker_role} {attacker} погиб.",
+        "en": "🔫 {victim} was attacked at night but fought back with a gun! The attacker {attacker_role} {attacker} died instead.",
+    },
+    "investigation_hidden": {
+        "uz": "aniqlab bo'lmadi (himoyalangan).",
+        "ru": "не удалось определить (под защитой).",
+        "en": "could not be determined (protected).",
+    },
+    "protection_name_qotildan_himoya": {"uz": "qotildan himoya", "ru": "защита от убийцы", "en": "murder protection"},
+    "protection_name_doridan_himoya": {"uz": "doridan himoya", "ru": "защита от яда", "en": "poison protection"},
+    "protection_name_qahramon_himoyasi": {"uz": "qahramon himoyasi", "ru": "защита героя", "en": "hero protection"},
     "last_words_prompt_dm": {
         "uz": "💀 Siz o'yindan chetlatildingiz. Oxirgi so'zingizni shu yerga (botga) yozing — u guruhga e'lon qilinadi! ({seconds} soniya)",
         "ru": "💀 Вы выбыли из игры. Напишите свои последние слова сюда (боту) — они будут объявлены в группе! ({seconds} секунд)",

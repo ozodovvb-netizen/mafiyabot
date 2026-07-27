@@ -7,13 +7,19 @@ from locales.texts import t
 from database.models import ShopItem, Hero, ProtectionType, User
 
 
-def start_menu_kb(lang: str, is_admin: bool = False) -> InlineKeyboardMarkup:
+def start_menu_kb(lang: str, is_admin: bool = False, admin_username: str = "") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(
         text=t("btn_add_to_group", lang),
         url=f"https://t.me/{config.BOT_USERNAME}?startgroup=true",
     )
-    builder.button(text=t("btn_questions", lang), callback_data="open:questions")
+    admin_handle = (admin_username or "").strip()
+    if admin_handle:
+        # To'g'ridan-to'g'ri adminning shaxsiy chatiga o'tkazadi (popup ko'rsatmasdan)
+        url = admin_handle if admin_handle.startswith("http") else f"https://t.me/{admin_handle.lstrip('@')}"
+        builder.button(text=t("btn_questions", lang), url=url)
+    else:
+        builder.button(text=t("btn_questions", lang), callback_data="open:questions")
     builder.button(text=t("btn_premium_groups", lang), callback_data="open:premium_groups")
     if is_admin:
         builder.button(text="🛠 Boshqaruv paneli", callback_data="adm:main")
@@ -39,9 +45,6 @@ def profile_menu_kb(lang: str) -> InlineKeyboardMarkup:
 
 def protections_kb(lang: str, user: User) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    items = [
-        (ProtectionType.himoya if False else None, None),  # placeholder not used
-    ]
     mapping = [
         ("🛡", "himoya_on", "himoya"),
         ("📄", "hujjat_on", "hujjat"),
@@ -51,6 +54,7 @@ def protections_kb(lang: str, user: User) -> InlineKeyboardMarkup:
         ("🧪", "doridan_himoya_on", "doridan_himoya"),
         ("🎭", "maska_on", "maska"),
         ("🥷", "sirpanishdan_himoya_on", "sirpanishdan_himoya"),
+        ("📗", "qahramon_himoyasi_on", "qahramon_himoyasi"),
     ]
     for emoji, field, code in mapping:
         state = t("on", lang) if getattr(user, field) else t("off", lang)
@@ -60,7 +64,7 @@ def protections_kb(lang: str, user: User) -> InlineKeyboardMarkup:
         callback_data="toggle_protection:faol_rol_on",
     )
     builder.button(text=t("btn_back", lang), callback_data="back:profile")
-    builder.adjust(2, 2, 2, 2, 1, 1)
+    builder.adjust(2, 2, 2, 2, 1, 1, 1)
     return builder.as_markup()
 
 

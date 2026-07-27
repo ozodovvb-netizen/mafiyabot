@@ -23,7 +23,7 @@ from config import (
     REGISTRATION_SECONDS, MIN_PLAYERS,
 )
 from database import crud
-from database.models import NightActionType, RoleTeam
+from database.models import NightActionType, RoleTeam, ProtectionType
 from locales.texts import t
 from game.roles_logic import assign_roles, check_win_condition
 from utils.helpers import mention
@@ -401,30 +401,90 @@ class GameEngine:
                 checked_info.append((actor_id, target_id))
 
         died = []
+        killed_back_attackers = []
         for target_id in kill_targets:
             if target_id in heal_targets:
                 continue
             target = self.players.get(target_id)
             if not target or not target.alive:
                 continue
-            # Himoya tekshiruvi (Do'kondan sotib olingan "qotildan himoya")
-            protected = await crud.consume_protection(target_id, __import__("database.models", fromlist=["ProtectionType"]).ProtectionType.qotildan_himoya)
-            if protected:
-                continue
-            target.alive = False
-            died.append(target)
 
-        # Komissar/tekshiruvchilarga natija yuboriladi
-        for checker_id, target_id in checked_info:
-            target = self.players.get(target_id)
-            if target and target.role:
+            # Do'kondan sotib olingan himoyalar ketma-ketlikda tekshiriladi -- birinchi
+            # ishlab turgani (qty>0 va yoqilgan bo'lsa) hujumdan qutqarib qoladi.
+            saved_by = None
+            for p_type in (
+                ProtectionType.qotildan_himoya, ProtectionType.doridan_himoya,
+                ProtectionType.qahramon_himoyasi,
+            ):
+                if await crud.consume_protection(target_id, p_type):
+                    saved_by = p_type
+                    break
+
+            if saved_by:
                 try:
                     await self.bot.send_message(
-                        checker_id,
-                        f"🔍 Tekshiruv natijasi: {target.name} — {target.role.team.value.upper()} jamoasidan.",
+                        target_id,
+                        t("protection_saved_you", self.lang, protection=t(f"protection_name_{saved_by.value}", self.lang)),
                     )
                 except Exception:
                     pass
+                continue
+
+            # "Miltiq" - hujum qilinganda o'zini otib, hujumchini fosh qilib o'ldiradi
+            if await crud.consume_protection(target_id, ProtectionType.miltiq):
+                attacker_id = self._find_kill_attacker(target_id)
+                if attacker_id:
+                    attacker = self.players.get(attacker_id)
+                    if attacker and attacker.alive:
+                        attacker.alive = False
+                        killed_back_attackers.append((target, attacker))
+                try:
+                    await self.bot.send_message(target_id, t("protection_gun_saved_you", self.lang))
+                except Exception:
+                    pass
+                continue
+
+            target.alive = False
+            died.append(target)
+
+        for victim, attacker in killed_back_attackers:
+            await self.bot.send_message(
+                self.chat_id,
+                t(
+                    "gun_killed_attacker", self.lang,
+                    victim=mention(victim.user_id, victim.name),
+                    attacker=mention(attacker.user_id, attacker.name),
+                    attacker_role=f"{attacker.role.emoji} {attacker.role.name}" if attacker.role else "",
+                ),
+            )
+            await self._handle_elimination_last_words(attacker, killed_at_night=True)
+
+        # Komissar/tekshiruvchilarga natija yuboriladi (hujjat/sirpanishdan himoya natijani
+        # yashiradi yoki soxtalashtiradi)
+        for checker_id, target_id in checked_info:
+            target = self.players.get(target_id)
+            if not target or not target.role:
+                continue
+            try:
+                if await crud.consume_protection(target_id, ProtectionType.sirpanishdan_himoya):
+                    await self.bot.send_message(
+                        checker_id,
+                        f"🔍 Tekshiruv natijasi: {target.name} — {t('investigation_hidden', self.lang)}",
+                    )
+                    continue
+                if await crud.consume_protection(target_id, ProtectionType.hujjat):
+                    fake_team = random.choice([tm for tm in ("peaceful", "mafia", "solo") if tm != target.role.team.value])
+                    await self.bot.send_message(
+                        checker_id,
+                        f"🔍 Tekshiruv natijasi: {target.name} — {fake_team.upper()} jamoasidan.",
+                    )
+                    continue
+                await self.bot.send_message(
+                    checker_id,
+                    f"🔍 Tekshiruv natijasi: {target.name} — {target.role.team.value.upper()} jamoasidan.",
+                )
+            except Exception:
+                pass
 
         if died:
             await self.bot.send_message(self.chat_id, await self._build_night_deaths_text(died))
@@ -433,13 +493,24 @@ class GameEngine:
         else:
             await self.bot.send_message(self.chat_id, t("trust_message", self.lang))
 
+    def _find_kill_attacker(self, target_id: int) -> int | None:
+        """Shu tunda `target_id` ga qarshi 'kill' harakati qilgan birinchi actor_id ni topadi."""
+        for actor_id, tid in self.night_actions.items():
+            if tid != target_id:
+                continue
+            actor = self.players.get(actor_id)
+            if actor and actor.role and actor.role.night_action_type == NightActionType.kill:
+                return actor_id
+        return None
+
     async def _build_night_deaths_text(self, died: list) -> str:
         """Har bir tunda o'lgan o'yinchi uchun rol nomini va (agar bo'lsa) o'sha kecha unga
         boshqa (o'ldiruvchi bo'lmagan) rol tashrif buyurganini oshkor qiladigan matn tuzadi."""
         from utils.helpers import mention
         lines = [t("night_deaths_title", self.lang)]
         for d in died:
-            role_label = f"{d.role.emoji} {d.role.name}" if d.role else ""
+            masked = await crud.consume_protection(d.user_id, ProtectionType.maska)
+            role_label = "" if masked else (f"{d.role.emoji} {d.role.name}" if d.role else "")
             line = t("night_death_line", self.lang, role=role_label, name=mention(d.user_id, d.name))
 
             visitor_id = None
@@ -515,12 +586,24 @@ class GameEngine:
             await self.bot.send_message(self.chat_id, t("vote_result", self.lang, likes=likes, dislikes=dislikes))
 
         if likes > dislikes:
-            nominee.alive = False
-            await self.bot.send_message(
-                self.chat_id,
-                t("player_hanged", self.lang, name=mention(nominee.user_id, nominee.name), role_emoji=nominee.role.emoji, role_name=nominee.role.name),
-            )
-            await self._handle_elimination_last_words(nominee, killed_at_night=False)
+            if await crud.consume_protection(nominee.user_id, ProtectionType.osishdan_himoya):
+                await self.bot.send_message(
+                    self.chat_id,
+                    t("protection_hanging_saved", self.lang, name=mention(nominee.user_id, nominee.name)),
+                )
+            else:
+                nominee.alive = False
+                if await crud.consume_protection(nominee.user_id, ProtectionType.maska):
+                    await self.bot.send_message(
+                        self.chat_id,
+                        t("player_hanged_masked", self.lang, name=mention(nominee.user_id, nominee.name)),
+                    )
+                else:
+                    await self.bot.send_message(
+                        self.chat_id,
+                        t("player_hanged", self.lang, name=mention(nominee.user_id, nominee.name), role_emoji=nominee.role.emoji, role_name=nominee.role.name),
+                    )
+                await self._handle_elimination_last_words(nominee, killed_at_night=False)
 
         self.current_nominee = None
 

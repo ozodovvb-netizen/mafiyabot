@@ -113,7 +113,19 @@ async def registration_timer(engine: GameEngine):
         )
         ACTIVE_GAMES.pop(engine.chat_id, None)
         return
-    await engine.start_game()
+    try:
+        await engine.start_game()
+    except Exception:
+        logger.exception("Ro'yxatdan o'tish yakunlangach o'yinni boshlashda xatolik (chat_id=%s)", engine.chat_id)
+        ACTIVE_GAMES.pop(engine.chat_id, None)
+        try:
+            await engine.bot.send_message(
+                engine.chat_id,
+                "❌ O'yinni boshlashda kutilmagan xatolik yuz berdi. Admin /admin orqali rollar "
+                "to'g'ri sozlanganini tekshirsin, so'ng /game bilan qaytadan boshlang.",
+            )
+        except Exception:
+            pass
 
 
 @router.message(Command("stop"), F.chat.type.in_({"group", "supergroup"}))
@@ -123,9 +135,13 @@ async def cmd_stop_game(message: Message):
         await message.answer("❌ Bu guruhda faol o'yin yo'q.")
         return
     if message.from_user.id != engine.host_id:
-        member = await message.chat.get_member(message.from_user.id)
-        if member.status not in ("administrator", "creator"):
-            await message.answer("❌ Faqat o'yinni boshlagan yoki guruh admini o'yinni to'xtata oladi.")
+        from utils.helpers import is_user_admin
+        allowed = await is_user_admin(message.from_user.id)
+        if not allowed:
+            member = await message.chat.get_member(message.from_user.id)
+            allowed = member.status in ("administrator", "creator")
+        if not allowed:
+            await message.answer("❌ Faqat o'yinni boshlagan yoki guruh/bot admini o'yinni to'xtata oladi.")
             return
     engine.stopped = True
     ACTIVE_GAMES.pop(message.chat.id, None)

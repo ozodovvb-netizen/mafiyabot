@@ -68,7 +68,25 @@ async def cmd_force_start(message: Message):
 
     engine.registration_open = False
     await message.answer(f"▶️ Admin tomonidan o'yin majburiy boshlandi ({len(engine.players)} o'yinchi bilan).")
-    spawn_task(engine.start_game(force=True))
+    spawn_task(_run_force_start(engine))
+
+
+async def _run_force_start(engine):
+    """start_game() ichida xatolik chiqsa ham, bu guruhda ko'rinadigan xabar bilan bildiradi
+    (aks holda o'yin 'boshlandi' deyilib, lekin aslida hech narsa yuz bermay jim qolib ketardi)."""
+    try:
+        await engine.start_game(force=True)
+    except Exception:
+        logger.exception("Majburiy /start orqali o'yinni boshlashda xatolik (chat_id=%s)", engine.chat_id)
+        ACTIVE_GAMES.pop(engine.chat_id, None)
+        try:
+            await engine.bot.send_message(
+                engine.chat_id,
+                "❌ O'yinni boshlashda kutilmagan xatolik yuz berdi. Iltimos, admin /admin orqali "
+                "rollar to'g'ri sozlanganini tekshirsin, so'ng /game bilan qaytadan boshlang.",
+            )
+        except Exception:
+            pass
 
 
 @router.message(Command("leave"), F.chat.type.in_({"group", "supergroup"}))
@@ -329,11 +347,12 @@ async def cmd_boylar(message: Message):
 
 @router.message(Command("vsgame"), F.chat.type.in_({"group", "supergroup"}))
 async def cmd_vsgame(message: Message):
-    # ESLATMA: bu rejim (jamoaviy/versus o'yin) videoda ko'ringan, lekin uning to'liq ichki
-    # qoidalarini (jamoalar qanday tuzilishi, g'alaba sharti) kadrlardan aniq o'qib bo'lmadi.
-    # Hozircha oddiy /game rejimiga yo'naltiramiz -- keyingi bosqichda screenshotlar bilan
-    # to'liq amalga oshiramiz.
+    # ESLATMA: alohida "jamoa-jamoaga" qoidalari (jamoalar qanday tuzilishi, maxsus g'alaba
+    # sharti) hali loyihalashtirilmagan, shuning uchun hozircha /vsgame oddiy /game oqimini
+    # ishga tushiradi (ilgari faqat "hali tayyor emas" deb yozib, hech narsa qilmasdi).
+    from handlers.group.game_start import cmd_game
     await message.answer(
-        "🆚 Jamoaviy (versus) o'yin rejimi hali ishlab chiqilmoqda.\n"
-        "Hozircha /game orqali oddiy o'yinni boshlashingiz mumkin."
+        "🆚 Jamoaviy (versus) rejimning maxsus qoidalari hali ishlab chiqilmoqda — "
+        "hozircha oddiy o'yin sifatida boshlanadi."
     )
+    await cmd_game(message)
