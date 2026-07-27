@@ -1,5 +1,6 @@
 """Do'kon (Himoyalar buyumlari) - foydalanuvchi sotib olishi."""
 from aiogram import Router, F
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery
 
 from database import crud
@@ -50,7 +51,7 @@ async def buy_item(callback: CallbackQuery):
     item = await crud.get_shop_item(item_id)
     user = await crud.get_user(callback.from_user.id)
 
-    if not item:
+    if not item or not user:
         await callback.answer()
         return
 
@@ -62,5 +63,14 @@ async def buy_item(callback: CallbackQuery):
         return
 
     await callback.answer(t("shop_item_bought", user.language, item_name=item.name), show_alert=True)
-    items = await crud.get_shop_items()
-    await callback.message.edit_reply_markup(reply_markup=shop_kb(user.language, items))
+
+    # Xarid qilingandan keyin ro'yxat (narx/nomlar) odatda o'zgarmaydi -- Telegram
+    # bunday holda "message is not modified" xatoligi qaytaradi. Bu zararsiz,
+    # shuning uchun sotib olish o'zi muvaffaqiyatli bo'lganidan keyin foydalanuvchiga
+    # "kutilmagan xatolik" ko'rsatmasligi uchun bu holatni jim yutib yuboramiz.
+    try:
+        items = await crud.get_shop_items()
+        await callback.message.edit_reply_markup(reply_markup=shop_kb(user.language, items))
+    except TelegramBadRequest as e:
+        if "message is not modified" not in str(e).lower():
+            raise

@@ -1,5 +1,6 @@
 """Profildagi 2-chi 'Xarid qilish' tugmasi: olmos evaziga dollar sotib olish."""
 from aiogram import Router, F
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery
 
 from database import crud
@@ -29,7 +30,7 @@ async def buy_money_package(callback: CallbackQuery):
     user = await crud.get_user(callback.from_user.id)
     packages = await crud.get_money_packages()
     pkg = next((p for p in packages if p.id == pkg_id), None)
-    if not pkg:
+    if not pkg or not user:
         await callback.answer()
         return
 
@@ -40,5 +41,9 @@ async def buy_money_package(callback: CallbackQuery):
     await crud.update_user_balance(callback.from_user.id, money_delta=pkg.money_amount, diamond_delta=-pkg.diamond_price)
     await callback.answer(t("money_bought", user.language, money=pkg.money_amount), show_alert=True)
 
-    packages = await crud.get_money_packages()
-    await callback.message.edit_reply_markup(reply_markup=money_packages_kb(user.language, packages))
+    try:
+        packages = await crud.get_money_packages()
+        await callback.message.edit_reply_markup(reply_markup=money_packages_kb(user.language, packages))
+    except TelegramBadRequest as e:
+        if "message is not modified" not in str(e).lower():
+            raise
