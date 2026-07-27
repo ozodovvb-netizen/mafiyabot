@@ -8,6 +8,7 @@ Oqim:
 """
 import asyncio
 import logging
+import time
 
 from aiogram import Router, F
 from aiogram.filters import Command
@@ -40,6 +41,7 @@ async def cmd_game(message: Message):
         session = await crud.create_game_session(message.chat.id, message.from_user.id)
         engine = GameEngine(message.bot, message.chat.id, session.id, message.from_user.id)
         engine.group_link = await _resolve_group_link(message)
+        engine.registration_deadline = time.time() + REGISTRATION_SECONDS
         ACTIVE_GAMES[message.chat.id] = engine
 
         # ESLATMA: o'yinni boshlagan odam endi AVTOMATIK qo'shilmaydi -- xohlasa
@@ -84,14 +86,20 @@ async def _send_and_pin_registration(engine: GameEngine, message: Message, banne
         url=f"https://t.me/{config.BOT_USERNAME}?start=join_{engine.session_id}",
     )
     text = await engine.registration_welcome_text() if banner else await engine.registration_message_text()
-    msg = await message.answer(text, reply_markup=builder.as_markup())
 
-    # Avvalgi ro'yxatdan o'tish xabarini yechib, yangisini qadaymiz
+    # Avvalgi ro'yxatdan o'tish xabarini butunlay o'chiramiz (shunda eski xabar
+    # osilib qolmaydi), qo'shilgan o'yinchilar ro'yxati (engine.players) tegilmaydi.
     if engine.registration_message_id:
         try:
             await message.bot.unpin_message(message.chat.id, engine.registration_message_id)
         except Exception:
             pass
+        try:
+            await message.bot.delete_message(message.chat.id, engine.registration_message_id)
+        except Exception:
+            pass
+
+    msg = await message.answer(text, reply_markup=builder.as_markup())
     engine.registration_message_id = msg.message_id
     try:
         await message.bot.pin_chat_message(message.chat.id, msg.message_id, disable_notification=True)
@@ -100,7 +108,16 @@ async def _send_and_pin_registration(engine: GameEngine, message: Message, banne
 
 
 async def registration_timer(engine: GameEngine):
-    await asyncio.sleep(REGISTRATION_SECONDS)
+    # Belgilangan tugash vaqtiga yetguncha kutamiz -- /extend buyrug'i
+    # engine.registration_deadline ni oshirsa, shu tsikl avtomatik moslashadi.
+    while True:
+        if engine.chat_id not in ACTIVE_GAMES or not engine.registration_open:
+            return  # bekor qilingan yoki allaqachon boshlangan
+        remaining = (engine.registration_deadline or time.time()) - time.time()
+        if remaining <= 0:
+            break
+        await asyncio.sleep(min(remaining, 5))
+
     if engine.chat_id not in ACTIVE_GAMES:
         return  # bekor qilingan yoki allaqachon boshlangan
     if not engine.registration_open:

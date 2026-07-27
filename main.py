@@ -49,6 +49,7 @@ async def _setup_bot_commands(bot: Bot):
     ]
     group_commands = [
         BotCommand(command="game", description="🎮 O'yin boshlash (ro'yxatdan o'tish)"),
+        BotCommand(command="extend", description="⏱ Ro'yxatdan o'tish vaqtini 180s uzaytirish (admin)"),
         BotCommand(command="start", description="▶️ Ro'yxatdan o'tishni majburiy yakunlab boshlash (admin)"),
         BotCommand(command="vsgame", description="🆚 Jamoaviy (versus) o'yin"),
         BotCommand(command="stop", description="🛑 O'yinni to'xtatish (admin)"),

@@ -61,6 +61,7 @@ class GameEngine:
         self.mode = "avtomatik"
         self.registration_open = True
         self.registration_message_id: int | None = None
+        self.registration_deadline: float | None = None  # ro'yxatdan o'tish tugash vaqti (time.time())
         self.group_link: str | None = None
         self.stopped = False
         self.nomination_open = False
@@ -76,6 +77,15 @@ class GameEngine:
             return False
         self.players[user_id] = PlayerState(user_id, name)
         return True
+
+    def extend_registration(self, seconds: int) -> float:
+        """Ro'yxatdan o'tish muddatiga qo'shimcha vaqt qo'shadi va yangi tugash
+        vaqtini (epoch) qaytaradi. registration_timer shu qiymatni kuzatib turadi."""
+        import time
+        base = self.registration_deadline if self.registration_deadline else time.time()
+        base = max(base, time.time())
+        self.registration_deadline = base + seconds
+        return self.registration_deadline
 
     def alive_players(self) -> list[PlayerState]:
         return [p for p in self.players.values() if p.alive]

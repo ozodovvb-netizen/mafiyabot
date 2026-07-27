@@ -89,6 +89,25 @@ async def _run_force_start(engine):
             pass
 
 
+@router.message(Command("extend"), F.chat.type.in_({"group", "supergroup"}))
+async def cmd_extend_registration(message: Message):
+    """Guruhda /extend -- faqat adminlar uchun: ro'yxatdan o'tish vaqtiga 180 soniya qo'shadi."""
+    engine = ACTIVE_GAMES.get(message.chat.id)
+    if not engine:
+        await message.answer("❌ Hozir bu guruhda faol ro'yxatdan o'tish yo'q. Avval /game yuboring.")
+        return
+    if not engine.registration_open:
+        await message.answer("⚠️ Ro'yxatdan o'tish allaqachon yakunlangan, uzaytirib bo'lmaydi.")
+        return
+    if not await is_group_admin(message):
+        await message.answer("❌ Ro'yxatdan o'tish vaqtini faqat guruh admini uzaytira oladi.")
+        return
+
+    EXTEND_SECONDS = 180
+    engine.extend_registration(EXTEND_SECONDS)
+    await message.answer(f"⏱ Ro'yxatdan o'tish vaqti {EXTEND_SECONDS} soniyaga uzaytirildi!")
+
+
 @router.message(Command("leave"), F.chat.type.in_({"group", "supergroup"}))
 async def cmd_leave(message: Message):
     engine = ACTIVE_GAMES.get(message.chat.id)
