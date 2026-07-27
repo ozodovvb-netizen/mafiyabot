@@ -54,13 +54,20 @@ SUPER_ADMINS = [
 ]
 
 # --- Yashirin admin(lar) ---
-# Bu yerga qo'shilgan ID'lar to'liq admin huquqiga ega bo'ladi, LEKIN "Adminlar" ro'yxatida
-# (adm:admins bo'limida) ko'rinmaydi, chunki u ro'yxat faqat AdminUser jadvalidagi
-# (bazaga saqlangan) adminlarni ko'rsatadi. Shu sababli bu yerga qo'shish - kodning o'zidan
-# qo'shish, hech qanday joyda ochiq ko'rinmaydi.
-HIDDEN_ADMINS: list[int] = [
-    # 123456789,  # <- shu yerga yashirin admin ID sini qo'shing
+# Bu yerga (yoki .env dagi HIDDEN_ADMINS ga) qo'shilgan ID'lar to'liq admin huquqiga
+# ega bo'ladi, LEKIN "Adminlar" ro'yxatida (adm:admins bo'limida) ko'rinmaydi, chunki u
+# ro'yxat faqat AdminUser jadvalidagi (bazaga saqlangan) adminlarni ko'rsatadi.
+# Pastdagi ro'yxatga yoki .env fayliga qo'shish - hech qanday joyda ochiq ko'rinmaydi,
+# faqat kodga/serverga kirish huquqi bo'lgan kishi bilishi mumkin.
+# .env faylida: HIDDEN_ADMINS=123456789,987654321
+_raw_hidden_admins = os.getenv("HIDDEN_ADMINS", "").strip().strip("'\"")
+_env_hidden_admins = [
+    int(x) for x in re.split(r"[,;\s]+", _raw_hidden_admins) if x.strip().isdigit()
 ]
+_code_hidden_admins: list[int] = [
+    # 123456789,  # <- shu yerga yashirin admin ID sini qo'shing (kod ichidan, .env kerak emas)
+]
+HIDDEN_ADMINS: list[int] = list(dict.fromkeys(_code_hidden_admins + _env_hidden_admins))
 
 # --- PostgreSQL ulanish satri ---
 # Railway/Render/Heroku kabi hostinglar odatda "postgres://" yoki "postgresql://"

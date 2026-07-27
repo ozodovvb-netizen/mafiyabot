@@ -27,6 +27,9 @@ async def adm_roles_list(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("adm_role:del:"))
 async def adm_role_delete(callback: CallbackQuery):
+    if not await is_user_admin(callback.from_user.id):
+        await callback.answer()
+        return
     role_id = int(callback.data.split(":")[-1])
     await crud.delete_role(role_id)
     roles = await crud.get_roles(active_only=False)

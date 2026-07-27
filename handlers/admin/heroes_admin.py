@@ -26,11 +26,17 @@ async def adm_heroes_list(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("adm_hero:del:"))
 async def adm_hero_delete(callback: CallbackQuery):
+    if not await is_user_admin(callback.from_user.id):
+        await callback.answer()
+        return
     hero_id = int(callback.data.split(":")[-1])
-    await crud.delete_hero(hero_id)
+    status = await crud.delete_hero(hero_id)
     heroes = await crud.get_heroes(active_only=False)
     await callback.message.edit_reply_markup(reply_markup=list_with_delete_kb(heroes, "adm_hero"))
-    await callback.answer("🗑 O'chirildi")
+    if status == "deactivated":
+        await callback.answer("⚠️ Bu geroyni sotib olganlar bor, shuning uchun butunlay o'chirilmadi - nofaol qilindi (endi hech kimga ko'rinmaydi)", show_alert=True)
+    else:
+        await callback.answer("🗑 O'chirildi")
 
 
 @router.callback_query(F.data == "adm_hero:add")

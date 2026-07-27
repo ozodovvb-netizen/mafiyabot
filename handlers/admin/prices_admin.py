@@ -27,13 +27,19 @@ async def adm_money_prices_list(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("adm_money_pkg:del:"))
 async def adm_money_pkg_delete(callback: CallbackQuery):
+    if not await is_user_admin(callback.from_user.id):
+        await callback.answer()
+        return
     pkg_id = int(callback.data.split(":")[-1])
-    await crud.delete_money_package(pkg_id)
+    status = await crud.delete_money_package(pkg_id)
     packages = await crud.get_money_packages(active_only=False)
     await callback.message.edit_reply_markup(
         reply_markup=list_with_delete_kb(packages, "adm_money_pkg", name_attr="money_amount")
     )
-    await callback.answer("🗑 O'chirildi")
+    if status == "deactivated":
+        await callback.answer("⚠️ Bu paket ishlatilgan, shuning uchun butunlay o'chirilmadi - nofaol qilindi", show_alert=True)
+    else:
+        await callback.answer("🗑 O'chirildi")
 
 
 @router.callback_query(F.data == "adm_money_pkg:add")
@@ -86,13 +92,19 @@ async def adm_diamond_prices_list(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("adm_diamond_pkg:del:"))
 async def adm_diamond_pkg_delete(callback: CallbackQuery):
+    if not await is_user_admin(callback.from_user.id):
+        await callback.answer()
+        return
     pkg_id = int(callback.data.split(":")[-1])
-    await crud.delete_diamond_package(pkg_id)
+    status = await crud.delete_diamond_package(pkg_id)
     packages = await crud.get_diamond_packages(active_only=False)
     await callback.message.edit_reply_markup(
         reply_markup=list_with_delete_kb(packages, "adm_diamond_pkg", name_attr="diamond_amount")
     )
-    await callback.answer("🗑 O'chirildi")
+    if status == "deactivated":
+        await callback.answer("⚠️ Bu paket avval sotib olingan, shuning uchun butunlay o'chirilmadi - nofaol qilindi", show_alert=True)
+    else:
+        await callback.answer("🗑 O'chirildi")
 
 
 @router.callback_query(F.data == "adm_diamond_pkg:add")

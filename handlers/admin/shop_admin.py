@@ -34,6 +34,9 @@ async def adm_shop_list(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith("adm_shop:del:"))
 async def adm_shop_delete(callback: CallbackQuery):
+    if not await is_user_admin(callback.from_user.id):
+        await callback.answer()
+        return
     item_id = int(callback.data.split(":")[-1])
     await crud.delete_shop_item(item_id)
     items = await crud.get_shop_items(active_only=False)

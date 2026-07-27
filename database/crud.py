@@ -5,6 +5,7 @@ Har bir funksiya o'zi session ochadi va yopadi - handlerlarda to'g'ridan-to'g'ri
 """
 from datetime import date, datetime
 from sqlalchemy import select, update, delete, func
+from sqlalchemy.exc import IntegrityError
 
 from database.db import async_session
 from database.models import (
@@ -13,6 +14,40 @@ from database.models import (
     AdminUser, GameSession, GamePlayer, RewardSettings, GroupSetting, GameMode,
     GenderEnum, ProtectionType, DiamondRequestStatus, GameStatus,
 )
+
+
+async def _safe_delete(model, row_id: int) -> str:
+    """
+    Berilgan qatorni o'chirishga urinadi. Agar bu qator boshqa jadvalda
+    (masalan o'ynalgan o'yinlar tarixida) ishlatilgan bo'lsa va shu sabab
+    bazadan butunlay o'chirib bo'lmasa (FK cheklovi xatoligi), uni butunlay
+    o'chirish o'rniga "is_active=False" qilib nofaollashtiradi - shunda u
+    foydalanuvchilarga hech qayerda ko'rinmaydi, lekin eski tarix buzilmaydi.
+
+    Qaytaradi: "deleted" | "deactivated" | "not_found"
+    """
+    async with async_session() as s:
+        obj = await s.get(model, row_id)
+        if obj is None:
+            return "not_found"
+        try:
+            await s.delete(obj)
+            await s.commit()
+            return "deleted"
+        except IntegrityError:
+            await s.rollback()
+
+    # Butunlay o'chira olmadik (boshqa joyda ishlatilgan) -> nofaollashtiramiz
+    async with async_session() as s:
+        obj = await s.get(model, row_id)
+        if obj is None:
+            return "not_found"
+        if hasattr(obj, "is_active"):
+            obj.is_active = False
+            await s.commit()
+            return "deactivated"
+        # is_active maydoni yo'q bo'lsa, iloji yo'q - xatolikni yuqoriga uzatamiz
+        raise
 
 
 # ---------------------------------------------------------------------------
@@ -186,10 +221,8 @@ async def create_shop_item(**kwargs) -> ShopItem:
         return item
 
 
-async def delete_shop_item(item_id: int):
-    async with async_session() as s:
-        await s.execute(delete(ShopItem).where(ShopItem.id == item_id))
-        await s.commit()
+async def delete_shop_item(item_id: int) -> str:
+    return await _safe_delete(ShopItem, item_id)
 
 
 async def purchase_shop_item(user_id: int, item: ShopItem, pay_with: str = "money") -> bool:
@@ -236,10 +269,17 @@ async def create_hero(**kwargs) -> Hero:
         return hero
 
 
-async def delete_hero(hero_id: int):
+async def delete_hero(hero_id: int) -> str:
+    # Bu geroyni "faol geroy" qilib tanlagan foydalanuvchilar bo'lsa, avval
+    # ularni bo'shatib qo'yamiz (aks holda FK xatoligi chiqadi).
     async with async_session() as s:
-        await s.execute(delete(Hero).where(Hero.id == hero_id))
+        await s.execute(
+            update(User).where(User.active_hero_id == hero_id).values(active_hero_id=None)
+        )
         await s.commit()
+    # Agar kimdir bu geroyni sotib olgan bo'lsa (user_heroes jadvalida), butunlay
+    # o'chirib bo'lmaydi - shu holda nofaollashtirilib qo'yiladi (_safe_delete ichida).
+    return await _safe_delete(Hero, hero_id)
 
 
 async def get_user_heroes(user_id: int) -> list[Hero]:
@@ -306,10 +346,20 @@ async def create_role(**kwargs) -> Role:
         return role
 
 
-async def delete_role(role_id: int):
+async def delete_role(role_id: int) -> str:
     async with async_session() as s:
+        # Eski o'yinlarda shu rol bilan o'ynagan qatorlar bo'lsa, ularni
+        # bo'shatib qo'yamiz (aks holda FK xatoligi bilan o'chirilmay qoladi).
+        await s.execute(
+            update(GamePlayer).where(GamePlayer.role_id == role_id).values(role_id=None)
+        )
+        # Boshqa rollar shu rolni "meros" sifatida ko'rsatgan bo'lsa, ularni ham tozalaymiz.
+        await s.execute(
+            update(Role).where(Role.succeeds_role_id == role_id).values(succeeds_role_id=None)
+        )
         await s.execute(delete(Role).where(Role.id == role_id))
         await s.commit()
+    return "deleted"
 
 
 # ---------------------------------------------------------------------------
@@ -333,10 +383,8 @@ async def create_game_mode(**kwargs) -> GameMode:
         return gm
 
 
-async def delete_game_mode(mode_id: int):
-    async with async_session() as s:
-        await s.execute(delete(GameMode).where(GameMode.id == mode_id))
-        await s.commit()
+async def delete_game_mode(mode_id: int) -> str:
+    return await _safe_delete(GameMode, mode_id)
 
 
 async def get_mode_for_player_count(count: int) -> str:
@@ -370,10 +418,8 @@ async def create_premium_group(**kwargs) -> PremiumGroup:
         return pg
 
 
-async def delete_premium_group(pg_id: int):
-    async with async_session() as s:
-        await s.execute(delete(PremiumGroup).where(PremiumGroup.id == pg_id))
-        await s.commit()
+async def delete_premium_group(pg_id: int) -> str:
+    return await _safe_delete(PremiumGroup, pg_id)
 
 
 # ---------------------------------------------------------------------------
@@ -397,10 +443,8 @@ async def create_money_package(**kwargs) -> MoneyPackage:
         return p
 
 
-async def delete_money_package(pkg_id: int):
-    async with async_session() as s:
-        await s.execute(delete(MoneyPackage).where(MoneyPackage.id == pkg_id))
-        await s.commit()
+async def delete_money_package(pkg_id: int) -> str:
+    return await _safe_delete(MoneyPackage, pkg_id)
 
 
 async def get_diamond_packages(active_only: bool = True) -> list[DiamondPackage]:
@@ -421,10 +465,8 @@ async def create_diamond_package(**kwargs) -> DiamondPackage:
         return p
 
 
-async def delete_diamond_package(pkg_id: int):
-    async with async_session() as s:
-        await s.execute(delete(DiamondPackage).where(DiamondPackage.id == pkg_id))
-        await s.commit()
+async def delete_diamond_package(pkg_id: int) -> str:
+    return await _safe_delete(DiamondPackage, pkg_id)
 
 
 async def create_diamond_topup_request(user_id: int, package_id: int, receipt_file_id: str) -> DiamondTopupRequest:

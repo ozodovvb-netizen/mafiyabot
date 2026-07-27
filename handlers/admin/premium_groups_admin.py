@@ -38,6 +38,9 @@ async def adm_pg_list(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data.startswith("adm_pg:del:"))
 async def adm_pg_delete(callback: CallbackQuery, state: FSMContext):
+    if not await is_user_admin(callback.from_user.id):
+        await callback.answer()
+        return
     pg_id = int(callback.data.split(":")[-1])
     await crud.delete_premium_group(pg_id)
     data = await state.get_data()
