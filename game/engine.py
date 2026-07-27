@@ -54,6 +54,7 @@ class GameEngine:
         self.day_number = 0
         self.night_actions: dict[int, int] = {}   # actor_id -> target_id
         self.night_action_mode: dict[int, "NightActionType"] = {}  # dual rol tanlagan tur (check/kill)
+        self.blocked_players: set[int] = set()  # shu tun "block" qilingan (masalan Kissen) o'yinchilar - keyingi KUNda hech narsa qila olmaydi
         self._flavor_announced_roles: set = set()
         self.votes: dict[int, str] = {}            # voter_id -> "like"/"dislike"
         self.current_nominee: int | None = None
@@ -480,6 +481,7 @@ class GameEngine:
         heal_entries: list[tuple[int, int]] = []  # (doctor_id, target_id)
         checked_info: list[tuple[int, int]] = []  # (checker_id, target_id)
         kill_entries: list[tuple[int, int, str]] = []  # (actor_id, target_id, team)
+        block_entries: list[tuple[int, int]] = []  # (blocker_id, target_id)
 
         for actor_id, target_id in self.night_actions.items():
             actor = self.players.get(actor_id)
@@ -494,6 +496,8 @@ class GameEngine:
                 heal_entries.append((actor_id, target_id))
             elif action == NightActionType.check:
                 checked_info.append((actor_id, target_id))
+            elif action == NightActionType.block:
+                block_entries.append((actor_id, target_id))
 
         # Jamoa bo'lib harakat qiluvchilar uchun (masalan mafiyalar) - agar jamoada
         # "boshliq" (masalan Don) bo'lsa, OXIRGI qaror shunga tegishli bo'ladi; boshliq
@@ -631,6 +635,29 @@ class GameEngine:
                     checker_id,
                     f"🔍 Tekshiruv natijasi: {target.name} — {target.role.emoji} <b>{target.role.name}</b> "
                     f"({target.role.team.value.upper()} jamoasidan).",
+                )
+            except Exception:
+                pass
+
+        # Bloklash (masalan Kissen): shu kecha bloklangan o'yinchilar KEYINGI kun davomida
+        # (nominatsiya va ovoz berishda) hech qanday harakat qila olmaydi. MUHIM TUZATISH:
+        # avval `block` turi umuman ishlanmasdi - Kissen kimnidir tanlasa ham hech narsa
+        # sodir bo'lmasdi, bloklangan odam kunduzi erkin ovoz bera olardi.
+        self.blocked_players = set()
+        for blocker_id, target_id in block_entries:
+            target = self.players.get(target_id)
+            if not target or not target.alive:
+                continue
+            self.blocked_players.add(target_id)
+            try:
+                await self.bot.send_message(
+                    blocker_id, f"🌙 Siz {target.name}ni blokladingiz — u ertaga kun davomida hech narsa qila olmaydi."
+                )
+            except Exception:
+                pass
+            try:
+                await self.bot.send_message(
+                    target_id, "😵 Bu kecha kimdir sizni blokladi — bugun kun davomida ovoz bera olmaysiz va hech kimni nomzod qilib ko'rsata olmaysiz."
                 )
             except Exception:
                 pass
@@ -842,6 +869,14 @@ class GameEngine:
         self.nomination_open = True
 
         for voter in alive:
+            if voter.user_id in self.blocked_players:
+                try:
+                    await self.bot.send_message(
+                        voter.user_id, "😵 Bugun blokdasiz — ovoz berish jarayonida qatnasha olmaysiz."
+                    )
+                except Exception:
+                    pass
+                continue
             builder = InlineKeyboardBuilder()
             for target in alive:
                 if target.user_id == voter.user_id:
@@ -891,6 +926,8 @@ class GameEngine:
     def register_nomination(self, voter_id: int, nominee_id: int):
         if not self.nomination_open:
             return False
+        if voter_id in self.blocked_players:
+            return False
         if voter_id not in self.alive_ids():
             return False
         if nominee_id not in self.alive_ids():
@@ -902,6 +939,8 @@ class GameEngine:
         return True
 
     def register_vote(self, voter_id: int, choice: str):
+        if voter_id in self.blocked_players:
+            return False
         if voter_id not in self.alive_ids():
             return False
         self.votes[voter_id] = choice
@@ -983,7 +1022,20 @@ class GameEngine:
         self.stopped = True
         await crud.finish_game(self.session_id)
 
-        winners = [p for p in self.players.values() if p.role and p.role.team.value == winner_team]
+        # MUHIM TUZATISH: avval "Yakka" (solo) jamoadagi o'yinchi (masalan Qotil) hech qachon
+        # o'z holicha g'olib deb hisoblanmasdi/mukofot olmasdi, chunki g'alaba faqat
+        # "mafia" yoki "peaceful" jamoasi bo'yicha aniqlanadi va Yakkaning jamoasi
+        # ("solo") bularning hech biriga TENG kelmaydi. Natijada Yakka o'yinchi doim
+        # "mafiya g'alaba qildimi/qilmadimi"ga qarab emas, balki O'ZINING oxirigacha
+        # TIRIK QOLGAN-QOLMAGANIGA qarab g'olib/mag'lub bo'lishi kerak - mafiya yoki
+        # tinch aholi g'alabasi Yakkaga umuman ALOQADOR EMAS.
+        winners = [
+            p for p in self.players.values()
+            if p.role and (
+                (p.role.team.value == "solo" and p.alive)
+                or (p.role.team.value != "solo" and p.role.team.value == winner_team)
+            )
+        ]
         others = [p for p in self.players.values() if p not in winners]
 
         winners_text = "\n".join(f"{i+1}. {mention(p.user_id, p.name)} — {p.role.emoji} {p.role.name}" for i, p in enumerate(winners))
