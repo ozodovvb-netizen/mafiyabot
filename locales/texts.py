@@ -571,6 +571,7 @@ TEXTS: dict[str, dict[str, str]] = {
         "ru": "не удалось определить (под защитой).",
         "en": "could not be determined (protected).",
     },
+    "protection_name_himoya": {"uz": "himoya", "ru": "защита", "en": "protection"},
     "protection_name_qotildan_himoya": {"uz": "qotildan himoya", "ru": "защита от убийцы", "en": "murder protection"},
     "protection_name_doridan_himoya": {"uz": "doridan himoya", "ru": "защита от яда", "en": "poison protection"},
     "protection_name_qahramon_himoyasi": {"uz": "qahramon himoyasi", "ru": "защита героя", "en": "hero protection"},

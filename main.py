@@ -33,6 +33,7 @@ from handlers.admin import (
 
 # --- Guruh (o'yin) handlerlari ---
 from handlers.group import game_start, registration, commands_extra
+from middlewares.group_member_tracker import GroupMemberTrackerMiddleware
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
@@ -61,6 +62,7 @@ async def _setup_bot_commands(bot: Bot):
         BotCommand(command="gsend", description="💎 Olmos hadya/giveaway (reply yoki 100-10)"),
         BotCommand(command="mgive", description="💵 Pul hadya/giveaway (reply yoki 100-10)"),
         BotCommand(command="change", description="💎 /gsend bilan bir xil"),
+        BotCommand(command="paratop", description="💘 Tasodifiy juftlik tanlash (shu guruhda)"),
         BotCommand(command="boylar", description="🏆 Eng boy o'yinchilar reytingi"),
     ]
     await bot.set_my_commands(private_commands, scope=BotCommandScopeAllPrivateChats())
@@ -96,6 +98,11 @@ async def main():
         except Exception:
             pass
         return True
+
+    # Har bir guruh xabaridan "shu foydalanuvchi shu guruhda faol" deb yozib
+    # qo'yadi (/paratop shu ro'yxatdan foydalanadi) -- boshqa handlerlar ishiga
+    # aralashmaydi, faqat orqa fonda kuzatadi.
+    dp.message.outer_middleware(GroupMemberTrackerMiddleware())
 
     # Admin routerlari (birinchi navbatda - "adm:" callbacklari ustuvor bo'lishi uchun)
     dp.include_router(panel.router)

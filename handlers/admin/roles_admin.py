@@ -8,6 +8,7 @@ from database.models import RoleTeam, NightActionType
 from keyboards.admin_kb import (
     back_admin_kb, role_team_select_kb, role_action_select_kb,
     role_list_view_kb, role_view_kb, role_team_edit_kb, role_action_edit_kb,
+    game_mode_pick_kb, role_money_target_kb,
 )
 from states.states import AdminRole, AdminRoleEdit
 from utils.helpers import is_user_admin
@@ -197,34 +198,32 @@ async def adm_role_edit_price_save(message: Message, state: FSMContext):
     )
 
 
-@router.callback_query(F.data.startswith("role_edit_mode:"))
-async def adm_role_edit_mode_start(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(F.data.startswith("role_edit_vote_weight:"))
+async def adm_role_edit_vote_weight_start(callback: CallbackQuery, state: FSMContext):
     if not await is_user_admin(callback.from_user.id):
         await callback.answer()
         return
     role_id = int(callback.data.split(":")[-1])
     await state.update_data(role_id=role_id)
-    await state.set_state(AdminRoleEdit.waiting_mode)
-    modes = await crud.get_game_modes(active_only=False)
-    modes_text = (
-        "\n".join(f"• {m.name} ({m.min_players}-{m.max_players} kishi)" for m in modes)
-        if modes else "— hozircha maxsus rejim yo'q, faqat \"classic\" mavjud —"
-    )
+    await state.set_state(AdminRoleEdit.waiting_vote_weight)
     await callback.message.edit_text(
-        f"🎲 Yangi rejim nomini yozing:\n\nMavjud rejimlar:\n{modes_text}",
+        "🗳 Kunduzgi ovoz berishda bu rol egasining OVOZI necha marta hisoblanishi kerak? "
+        "(masalan oddiy uchun 1, \"2x ovoz\" uchun 2):",
         reply_markup=back_admin_kb(f"adm_role:view:{role_id}"),
     )
     await callback.answer()
 
 
-@router.message(AdminRoleEdit.waiting_mode)
-async def adm_role_edit_mode_save(message: Message, state: FSMContext):
+@router.message(AdminRoleEdit.waiting_vote_weight)
+async def adm_role_edit_vote_weight_save(message: Message, state: FSMContext):
     if not await is_user_admin(message.from_user.id):
         await state.clear()
         return
-    mode = message.text.strip().lower().strip("'\"“”‘’") or "classic"
+    if not message.text.strip().isdigit() or int(message.text.strip()) < 1:
+        await message.answer("❌ Faqat 1 yoki undan katta raqam yuboring.")
+        return
     data = await state.get_data()
-    role = await crud.update_role(data["role_id"], mode=mode)
+    role = await crud.update_role(data["role_id"], day_vote_weight=int(message.text.strip()))
     await state.clear()
     if not role:
         await message.answer("❌ Bu rol allaqachon o'chirilgan.")
@@ -234,6 +233,132 @@ async def adm_role_edit_mode_save(message: Message, state: FSMContext):
         "Quyidagi tugmalar orqali har bir sozlamani alohida o'zgartirishingiz mumkin:",
         reply_markup=role_view_kb(role),
     )
+
+
+@router.callback_query(F.data.startswith("role_edit_money_open:"))
+async def adm_role_edit_money_open(callback: CallbackQuery):
+    if not await is_user_admin(callback.from_user.id):
+        await callback.answer()
+        return
+    _, role_id_s, phase = callback.data.split(":")
+    label = "Tungi (tun tugaganda)" if phase == "night" else "Kunduzgi (kun boshlanganda)"
+    await callback.message.edit_text(
+        f"💰 {label} pul effekti turini tanlang:",
+        reply_markup=role_money_target_kb(int(role_id_s), phase),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("role_edit_money_set:"))
+async def adm_role_edit_money_set(callback: CallbackQuery, state: FSMContext):
+    if not await is_user_admin(callback.from_user.id):
+        await callback.answer()
+        return
+    _, role_id_s, phase, target = callback.data.split(":")
+    role_id = int(role_id_s)
+    if target == "none":
+        role = await crud.update_role(role_id, **{f"{phase}_money_target": None, f"{phase}_money_amount": 0})
+        if not role:
+            await callback.answer("❌ Bu rol allaqachon o'chirilgan.", show_alert=True)
+            return
+        await callback.message.edit_text(
+            f"{role.emoji} <b>{role.name}</b>\n\n{role.description}\n\n"
+            "Quyidagi tugmalar orqali har bir sozlamani alohida o'zgartirishingiz mumkin:",
+            reply_markup=role_view_kb(role),
+        )
+        await callback.answer("✅ Yangilandi")
+        return
+
+    await state.update_data(role_id=role_id, phase=phase, target=target)
+    await state.set_state(
+        AdminRoleEdit.waiting_night_money_amount if phase == "night" else AdminRoleEdit.waiting_day_money_amount
+    )
+    who = "o'ziga" if target == "self" else "HAR BIR tirik o'yinchiga"
+    await callback.message.edit_text(
+        f"💵 Necha dollar {who} berilsin? (masalan: 50):",
+        reply_markup=back_admin_kb(f"adm_role:view:{role_id}"),
+    )
+    await callback.answer()
+
+
+@router.message(AdminRoleEdit.waiting_night_money_amount)
+@router.message(AdminRoleEdit.waiting_day_money_amount)
+async def adm_role_edit_money_amount_save(message: Message, state: FSMContext):
+    if not await is_user_admin(message.from_user.id):
+        await state.clear()
+        return
+    if not message.text.strip().isdigit() or int(message.text.strip()) <= 0:
+        await message.answer("❌ Faqat 0 dan katta raqam yuboring.")
+        return
+    data = await state.get_data()
+    phase = data["phase"]
+    role = await crud.update_role(
+        data["role_id"],
+        **{f"{phase}_money_target": data["target"], f"{phase}_money_amount": int(message.text.strip())},
+    )
+    await state.clear()
+    if not role:
+        await message.answer("❌ Bu rol allaqachon o'chirilgan.")
+        return
+    await message.answer(
+        f"{role.emoji} <b>{role.name}</b>\n\n{role.description}\n\n"
+        "Quyidagi tugmalar orqali har bir sozlamani alohida o'zgartirishingiz mumkin:",
+        reply_markup=role_view_kb(role),
+    )
+
+
+@router.callback_query(F.data.startswith("role_edit_mode:"))
+async def adm_role_edit_mode_start(callback: CallbackQuery, state: FSMContext):
+    if not await is_user_admin(callback.from_user.id):
+        await callback.answer()
+        return
+    role_id = int(callback.data.split(":")[-1])
+    await state.update_data(role_id=role_id)
+    await state.set_state(AdminRoleEdit.waiting_mode)
+    names = await crud.get_mode_names()
+    await callback.message.edit_text(
+        "🎲 Yangi rejimni tanlang:",
+        reply_markup=game_mode_pick_kb(names, "role_edit_mode_pick", back_target=f"adm_role:view:{role_id}"),
+    )
+    await callback.answer()
+
+
+@router.callback_query(AdminRoleEdit.waiting_mode, F.data.startswith("role_edit_mode_pick:"))
+async def adm_role_edit_mode_save(callback: CallbackQuery, state: FSMContext):
+    if not await is_user_admin(callback.from_user.id):
+        await callback.answer()
+        await state.clear()
+        return
+    idx = int(callback.data.split(":")[-1])
+    names = await crud.get_mode_names()
+    mode = names[idx] if 0 <= idx < len(names) else "classic"
+    data = await state.get_data()
+    role_id = data["role_id"]
+
+    existing = await crud.get_role(role_id)
+    if existing and await crud.role_name_exists_in_mode(existing.name, mode, exclude_id=role_id):
+        await state.clear()
+        await callback.message.edit_text(
+            f"⚠️ \"{existing.name}\" nomli rol \"{mode}\" rejimida allaqachon mavjud. "
+            "Rejimni o'zgartirib bo'lmaydi, chunki bitta o'yinda bir xil rol ikki marta "
+            "chiqib qolishi mumkin.",
+            reply_markup=role_view_kb(existing),
+        )
+        await callback.answer()
+        return
+
+    role = await crud.update_role(role_id, mode=mode)
+    await state.clear()
+    if not role:
+        await callback.message.edit_text("❌ Bu rol allaqachon o'chirilgan.")
+        await callback.answer()
+        return
+    await callback.message.edit_text(
+        f"{role.emoji} <b>{role.name}</b>\n\n{role.description}\n\n"
+        "Quyidagi tugmalar orqali har bir sozlamani alohida o'zgartirishingiz mumkin:",
+        reply_markup=role_view_kb(role),
+    )
+    await callback.answer()
 
 
 @router.callback_query(F.data.startswith("role_edit_desc:"))
@@ -376,32 +501,30 @@ async def adm_role_action(callback: CallbackQuery, state: FSMContext):
     await state.update_data(action=action)
     await state.set_state(AdminRole.waiting_mode)
 
-    modes = await crud.get_game_modes(active_only=False)
-    modes_text = (
-        "\n".join(f"• {m.name} ({m.min_players}-{m.max_players} kishi)" for m in modes)
-        if modes else "— hozircha maxsus rejim yo'q, faqat \"classic\" mavjud —"
-    )
+    names = await crud.get_mode_names()
     await callback.message.edit_text(
-        "🎲 Bu rol qaysi o'yin rejimiga tegishli? Rejim nomini yozing "
-        "(mos rejim bo'lmasa \"classic\" deb yozing):\n\n"
-        f"Mavjud rejimlar:\n{modes_text}",
-        reply_markup=back_admin_kb("adm:roles"),
+        "🎲 Bu rol qaysi o'yin rejimiga tegishli? Tugma orqali tanlang:",
+        reply_markup=game_mode_pick_kb(names, "role_mode_pick"),
     )
     await callback.answer()
 
 
-@router.message(AdminRole.waiting_mode)
-async def adm_role_mode(message: Message, state: FSMContext):
-    if not await is_user_admin(message.from_user.id):
+@router.callback_query(AdminRole.waiting_mode, F.data.startswith("role_mode_pick:"))
+async def adm_role_mode(callback: CallbackQuery, state: FSMContext):
+    if not await is_user_admin(callback.from_user.id):
+        await callback.answer()
         await state.clear()
         return
-    mode = message.text.strip().lower().strip("'\"“”‘’") or "classic"
+    idx = int(callback.data.split(":")[-1])
+    names = await crud.get_mode_names()
+    mode = names[idx] if 0 <= idx < len(names) else "classic"
     await state.update_data(mode=mode)
     await state.set_state(AdminRole.waiting_description)
-    await message.answer(
+    await callback.message.edit_text(
         "✍️ Rol tavsifini yozing (bu matn foydalanuvchi /roles bosganda ko'radigan tavsif bo'ladi - "
         "'bu rol nima qila oladi'):"
     )
+    await callback.answer()
 
 
 @router.message(AdminRole.waiting_description)
@@ -515,14 +638,120 @@ async def adm_role_succeeds(callback: CallbackQuery, state: FSMContext):
         return
     succ_id = int(callback.data.split(":")[-1])
     await state.update_data(succeeds_role_id=succ_id or None)
-    await state.set_state(AdminRole.waiting_price)
+    await state.set_state(AdminRole.waiting_vote_weight)
     await callback.message.edit_text(
+        "🗳 Kunduzgi ovoz berishda (kimni osish kerakligiga ovoz berishda) bu rol "
+        "egasining OVOZI necha marta hisoblansin? Oddiy uchun 1 yozing, \"2x ovoz\" "
+        "uchun 2 yozing:",
+        reply_markup=back_admin_kb("adm:roles"),
+    )
+    await callback.answer()
+
+
+@router.message(AdminRole.waiting_vote_weight)
+async def adm_role_vote_weight(message: Message, state: FSMContext):
+    if not await is_user_admin(message.from_user.id):
+        await state.clear()
+        return
+    if not message.text.strip().isdigit() or int(message.text.strip()) < 1:
+        await message.answer("❌ Faqat 1 yoki undan katta raqam yuboring.")
+        return
+    await state.update_data(day_vote_weight=int(message.text.strip()))
+    await state.set_state(AdminRole.waiting_night_money_target)
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    builder = InlineKeyboardBuilder()
+    builder.button(text="➖ Effekt yo'q", callback_data="role_new_money:night:none")
+    builder.button(text="🙋 O'ziga (pul ishlab topadi)", callback_data="role_new_money:night:self")
+    builder.button(text="👥 Hammaga (pul tarqatadi)", callback_data="role_new_money:night:all")
+    builder.adjust(1)
+    await message.answer(
+        "🌙💰 Bu rol TUN tugagach avtomatik pul effektiga egami?", reply_markup=builder.as_markup()
+    )
+
+
+@router.callback_query(AdminRole.waiting_night_money_target, F.data.startswith("role_new_money:night:"))
+async def adm_role_night_money_target(callback: CallbackQuery, state: FSMContext):
+    if not await is_user_admin(callback.from_user.id):
+        await callback.answer()
+        await state.clear()
+        return
+    target = callback.data.split(":")[-1]
+    if target == "none":
+        await state.update_data(night_money_target=None, night_money_amount=0)
+        await _adm_role_ask_day_money(callback.message, state)
+    else:
+        await state.update_data(night_money_target=target)
+        await state.set_state(AdminRole.waiting_night_money_amount)
+        who = "o'ziga" if target == "self" else "HAR BIR tirik o'yinchiga"
+        await callback.message.edit_text(f"💵 Har tundan keyin {who} necha dollar berilsin? (masalan: 50):")
+    await callback.answer()
+
+
+@router.message(AdminRole.waiting_night_money_amount)
+async def adm_role_night_money_amount(message: Message, state: FSMContext):
+    if not await is_user_admin(message.from_user.id):
+        await state.clear()
+        return
+    if not message.text.strip().isdigit() or int(message.text.strip()) <= 0:
+        await message.answer("❌ Faqat 0 dan katta raqam yuboring.")
+        return
+    await state.update_data(night_money_amount=int(message.text.strip()))
+    await _adm_role_ask_day_money(message, state)
+
+
+async def _adm_role_ask_day_money(message: Message, state: FSMContext):
+    await state.set_state(AdminRole.waiting_day_money_target)
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    builder = InlineKeyboardBuilder()
+    builder.button(text="➖ Effekt yo'q", callback_data="role_new_money:day:none")
+    builder.button(text="🙋 O'ziga (pul ishlab topadi)", callback_data="role_new_money:day:self")
+    builder.button(text="👥 Hammaga (pul tarqatadi)", callback_data="role_new_money:day:all")
+    builder.adjust(1)
+    await message.answer(
+        "☀️💰 Bu rol KUN boshlanganda avtomatik pul effektiga egami?", reply_markup=builder.as_markup()
+    )
+
+
+@router.callback_query(AdminRole.waiting_day_money_target, F.data.startswith("role_new_money:day:"))
+async def adm_role_day_money_target(callback: CallbackQuery, state: FSMContext):
+    if not await is_user_admin(callback.from_user.id):
+        await callback.answer()
+        await state.clear()
+        return
+    target = callback.data.split(":")[-1]
+    if target == "none":
+        await state.update_data(day_money_target=None, day_money_amount=0)
+        await state.set_state(AdminRole.waiting_price)
+        await callback.message.edit_text(
+            "💎 Bu rolni foydalanuvchilar do'kondan (\"Faol rol\") sotib olib, KEYINGI o'yinda "
+            "aynan shu rolda o'ynashlari mumkinmi? Narxini olmosda yozing (0 = sotilmaydi, "
+            "faqat tasodifiy taqsimotda tushadi):",
+            reply_markup=back_admin_kb("adm:roles"),
+        )
+    else:
+        await state.update_data(day_money_target=target)
+        await state.set_state(AdminRole.waiting_day_money_amount)
+        who = "o'ziga" if target == "self" else "HAR BIR tirik o'yinchiga"
+        await callback.message.edit_text(f"💵 Har kun boshida {who} necha dollar berilsin? (masalan: 50):")
+    await callback.answer()
+
+
+@router.message(AdminRole.waiting_day_money_amount)
+async def adm_role_day_money_amount(message: Message, state: FSMContext):
+    if not await is_user_admin(message.from_user.id):
+        await state.clear()
+        return
+    if not message.text.strip().isdigit() or int(message.text.strip()) <= 0:
+        await message.answer("❌ Faqat 0 dan katta raqam yuboring.")
+        return
+    await state.update_data(day_money_amount=int(message.text.strip()))
+    await state.set_state(AdminRole.waiting_price)
+    await message.answer(
         "💎 Bu rolni foydalanuvchilar do'kondan (\"Faol rol\") sotib olib, KEYINGI o'yinda "
         "aynan shu rolda o'ynashlari mumkinmi? Narxini olmosda yozing (0 = sotilmaydi, "
         "faqat tasodifiy taqsimotda tushadi):",
         reply_markup=back_admin_kb("adm:roles"),
     )
-    await callback.answer()
 
 
 @router.message(AdminRole.waiting_price)
@@ -534,17 +763,39 @@ async def adm_role_price(message: Message, state: FSMContext):
         await message.answer("❌ Faqat raqam yuboring (0 = sotilmaydi).")
         return
     data = await state.get_data()
+    role_name = data["name"]
+    role_mode = data.get("mode", "classic")
+
+    # Bir xil rejimda bir xil nomli rol allaqachon bormi -- tekshiramiz. Aks holda
+    # bitta o'yinda bir xil rol (masalan "Don") ikki marta chiqib qolishi mumkin.
+    if await crud.role_name_exists_in_mode(role_name, role_mode):
+        await state.clear()
+        roles = await crud.get_roles(active_only=False)
+        await message.answer(
+            f"⚠️ \"{role_name}\" nomli rol \"{role_mode}\" rejimida allaqachon mavjud. "
+            "Bir xil rejimda bir xil nomli rolni ikki marta qo'shib bo'lmaydi "
+            "(aks holda o'yinda bitta rol ikki kishiga tushib qolishi mumkin). "
+            "Boshqa nom bilan qaytadan urinib ko'ring yoki mavjud rolni tahrirlang.",
+            reply_markup=role_list_view_kb(roles),
+        )
+        return
+
     await crud.create_role(
-        name=data["name"],
+        name=role_name,
         team=RoleTeam(data["team"]),
         night_action_type=NightActionType(data["action"]),
         description=data["description"],
         max_per_game=data["max_per_game"],
-        mode=data.get("mode", "classic"),
+        mode=role_mode,
         is_team_boss=data.get("is_team_boss", False),
         acts_independently=data.get("acts_independently", False),
         dual_check_or_kill=data.get("dual_check_or_kill", False),
         succeeds_role_id=data.get("succeeds_role_id"),
+        day_vote_weight=data.get("day_vote_weight", 1),
+        night_money_target=data.get("night_money_target"),
+        night_money_amount=data.get("night_money_amount", 0),
+        day_money_target=data.get("day_money_target"),
+        day_money_amount=data.get("day_money_amount", 0),
         price_diamond=int(message.text.strip()),
     )
     await state.clear()

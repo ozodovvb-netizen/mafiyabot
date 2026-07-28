@@ -12,7 +12,7 @@ from database.models import (
     User, ShopItem, Hero, UserHero, Role, PremiumGroup, MoneyPackage,
     DiamondPackage, DiamondTopupRequest, PartnerRequest, BotSetting,
     AdminUser, GameSession, GamePlayer, RewardSettings, GroupSetting, GameMode,
-    GenderEnum, ProtectionType, DiamondRequestStatus, GameStatus,
+    GenderEnum, ProtectionType, DiamondRequestStatus, GameStatus, GroupMember,
 )
 
 
@@ -412,6 +412,22 @@ async def get_reserved_roles(user_ids: list[int]) -> dict[int, Role]:
         return result
 
 
+async def role_name_exists_in_mode(name: str, mode: str, exclude_id: int | None = None) -> bool:
+    """Xuddi shu rejimda (katta-kichik harfga qaramay) bir xil nomli faol rol
+    borligini tekshiradi. Buni tekshirmasdan rol qo'shilsa, bitta o'yinda bir xil
+    rol 2 marta chiqib qolishi mumkin (masalan ikkita "Don")."""
+    async with async_session() as s:
+        q = select(Role).where(
+            func.lower(Role.mode) == mode.strip().lower(),
+            func.lower(Role.name) == name.strip().lower(),
+            Role.is_active == True,  # noqa: E712
+        )
+        if exclude_id is not None:
+            q = q.where(Role.id != exclude_id)
+        res = await s.execute(q)
+        return res.scalars().first() is not None
+
+
 async def create_role(**kwargs) -> Role:
     async with async_session() as s:
         role = Role(**kwargs)
@@ -452,6 +468,29 @@ async def delete_role(role_id: int) -> str:
 # ---------------------------------------------------------------------------
 # O'YIN REJIMLARI
 # ---------------------------------------------------------------------------
+async def get_mode_names(active_only: bool = False) -> list[str]:
+    """"classic" + bazadagi barcha rejim nomlari, dublikatsiz (katta-kichik harfga
+    qaramay). Rol qo'shish/tahrirlashda rejimni ERKIN MATN emas, TUGMA orqali
+    tanlash uchun ishlatiladi -- shu bilan imlo xatosi imkoniyati yo'qoladi."""
+    modes = await get_game_modes(active_only=active_only)
+    names: list[str] = []
+    seen: set[str] = set()
+    for name in ["classic"] + [m.name for m in modes]:
+        key = name.strip().lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        names.append(name)
+    return names
+
+
+async def get_roles_for_mode(mode_name: str, active_only: bool = False) -> list[Role]:
+    """Berilgan rejimga (nomi bo'yicha, katta-kichik harfga qaramay) tegishli
+    barcha rollarni qaytaradi. Admin panelda "Rejim -> unga tegishli rollar"
+    ko'rinishini qurish uchun ishlatiladi."""
+    return await get_roles(active_only=active_only, mode=mode_name)
+
+
 async def get_game_modes(active_only: bool = True) -> list[GameMode]:
     async with async_session() as s:
         q = select(GameMode).order_by(GameMode.min_players)
@@ -630,6 +669,46 @@ async def find_random_partner_candidate(user_id: int, opposite_gender: GenderEnu
             .limit(1)
         )
         return res.scalar_one_or_none()
+
+
+# ---------------------------------------------------------------------------
+# GURUH A'ZOLARI (/paratop uchun) -- bitta guruhda kim faol bo'lganini saqlaydi
+# ---------------------------------------------------------------------------
+async def track_group_member(chat_id: int, user_id: int):
+    """Foydalanuvchi shu guruhda faol ekanini belgilaydi (mavjud bo'lsa last_seen
+    yangilanadi, bo'lmasa yangi qator qo'shiladi). /paratop faqat shu ro'yxatdagi
+    (ya'ni haqiqatan shu guruhda yozgan) foydalanuvchilar orasidan qidiradi."""
+    async with async_session() as s:
+        res = await s.execute(
+            select(GroupMember).where(GroupMember.chat_id == chat_id, GroupMember.user_id == user_id)
+        )
+        row = res.scalar_one_or_none()
+        if row:
+            row.last_seen = datetime.utcnow()
+        else:
+            s.add(GroupMember(chat_id=chat_id, user_id=user_id, last_seen=datetime.utcnow()))
+        try:
+            await s.commit()
+        except IntegrityError:
+            # Bir vaqtda ikkita xabar kelib, ikkalasi ham yangi qator qo'shmoqchi
+            # bo'lib qolishi mumkin -- bunday holatda shunchaki e'tiborsiz qoldiramiz.
+            await s.rollback()
+
+
+async def get_group_members_by_gender(chat_id: int, gender: GenderEnum) -> list[User]:
+    """Shu GURUHDA faol bo'lgan (GroupMember jadvalida qayd etilgan) va berilgan
+    jinsi belgilangan, bloklanmagan foydalanuvchilar ro'yxati."""
+    async with async_session() as s:
+        res = await s.execute(
+            select(User)
+            .join(GroupMember, GroupMember.user_id == User.id)
+            .where(
+                GroupMember.chat_id == chat_id,
+                User.gender == gender,
+                User.is_banned == False,  # noqa: E712
+            )
+        )
+        return list(res.scalars().unique().all())
 
 
 # ---------------------------------------------------------------------------

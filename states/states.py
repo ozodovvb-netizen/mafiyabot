@@ -44,6 +44,11 @@ class AdminRole(StatesGroup):
     waiting_independent = State()
     waiting_dual_action = State()
     waiting_succeeds = State()
+    waiting_vote_weight = State()
+    waiting_night_money_target = State()
+    waiting_night_money_amount = State()
+    waiting_day_money_target = State()
+    waiting_day_money_amount = State()
     waiting_price = State()
 
 
@@ -52,6 +57,9 @@ class AdminRoleEdit(StatesGroup):
     waiting_price = State()
     waiting_mode = State()
     waiting_desc = State()
+    waiting_vote_weight = State()
+    waiting_night_money_amount = State()
+    waiting_day_money_amount = State()
 
 
 class AdminGameMode(StatesGroup):

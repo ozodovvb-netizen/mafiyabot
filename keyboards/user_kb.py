@@ -46,19 +46,20 @@ def profile_menu_kb(lang: str) -> InlineKeyboardMarkup:
 def protections_kb(lang: str, user: User) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     mapping = [
-        ("🛡", "himoya_on", "himoya"),
-        ("📄", "hujjat_on", "hujjat"),
-        ("🪂", "osishdan_himoya_on", "osishdan_himoya"),
-        ("🩸", "qotildan_himoya_on", "qotildan_himoya"),
-        ("🔫", "miltiq_on", "miltiq"),
-        ("🧪", "doridan_himoya_on", "doridan_himoya"),
-        ("🎭", "maska_on", "maska"),
-        ("🥷", "sirpanishdan_himoya_on", "sirpanishdan_himoya"),
-        ("📗", "qahramon_himoyasi_on", "qahramon_himoyasi"),
+        ("🛡", "himoya_on", "himoya_qty"),
+        ("📄", "hujjat_on", "hujjat_qty"),
+        ("🪂", "osishdan_himoya_on", "osishdan_himoya_qty"),
+        ("🩸", "qotildan_himoya_on", "qotildan_himoya_qty"),
+        ("🔫", "miltiq_on", "miltiq_qty"),
+        ("🧪", "doridan_himoya_on", "doridan_himoya_qty"),
+        ("🎭", "maska_on", "maska_qty"),
+        ("🥷", "sirpanishdan_himoya_on", "sirpanishdan_himoya_qty"),
+        ("📗", "qahramon_himoyasi_on", "qahramon_himoyasi_qty"),
     ]
-    for emoji, field, code in mapping:
+    for emoji, field, qty_field in mapping:
         state = t("on", lang) if getattr(user, field) else t("off", lang)
-        builder.button(text=f"{emoji} — {state}", callback_data=f"toggle_protection:{field}")
+        qty = getattr(user, qty_field)
+        builder.button(text=f"{emoji} — {state} ({qty} dona)", callback_data=f"toggle_protection:{field}")
     builder.button(
         text=f"{t('btn_faol_rol', lang)} — {(t('on', lang) if user.faol_rol_on else t('off', lang))}",
         callback_data="toggle_protection:faol_rol_on",

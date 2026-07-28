@@ -27,7 +27,7 @@ from database import crud
 from database.models import NightActionType, RoleTeam, ProtectionType
 from locales.texts import t
 from game.roles_logic import assign_roles, check_win_condition
-from utils.helpers import mention
+from utils.helpers import mention, spawn_task
 
 # Har bir chat uchun faol o'yin (chat_id -> GameEngine)
 ACTIVE_GAMES: dict[int, "GameEngine"] = {}
@@ -314,11 +314,24 @@ class GameEngine:
         if self.stopped:
             return
         await self._resolve_night_actions()
+        if self.stopped:
+            return
+        await self._apply_money_effects("night")
 
     async def _kick_inactive_players(self):
         """O'tgan to'liq tun+kun siklida hech qanday harakat qilmagan (tungi harakat ham,
-        kunduzgi ovoz ham bermagan) o'yinchilarni o'yindan chetlatadi."""
-        to_kick = [p for p in self.alive_players() if not p.acted_this_cycle]
+        kunduzgi ovoz ham bermagan) o'yinchilarni o'yindan chetlatadi.
+
+        MUHIM TUZATISH: agar tungi harakat turi yo'q (night_action_type=none) o'yinchi
+        o'sha kuni kimdir tomonidan BLOKLANGAN bo'lsa (masalan Sehrgar/Kissen), u
+        kunduzi ham ovoz bera olmagan, ya'ni "harakat qilmadi" - lekin bu o'z aybi
+        emas, balki blok tufayli. Bunday o'yinchilarni AFK deb noto'g'ri chetlatib
+        qo'yish avvalgi versiyada mavjud bug edi - endi bloklangan o'yinchilar bu
+        tekshiruvdan istisno qilinadi."""
+        to_kick = [
+            p for p in self.alive_players()
+            if not p.acted_this_cycle and p.user_id not in self.blocked_players
+        ]
         for p in to_kick:
             p.alive = False
             try:
@@ -407,6 +420,20 @@ class GameEngine:
     }
 
     async def _send_night_action_prompt(self, actor: PlayerState):
+        if actor.role.night_action_type == NightActionType.custom:
+            # "Faqat matn / avtomatikasiz" rol -- tunda nishon tanlash tugmalari
+            # yuborilmaydi (chunki hech qanday avtomatik natija yo'q), o'rniga
+            # admin yozgan rol tavsifi shaxsiy xabar sifatida yuboriladi va rol
+            # AFK deb hisoblanmasligi uchun "harakat qildi" deb belgilanadi.
+            try:
+                await self.bot.send_message(
+                    actor.user_id,
+                    f"🌙 {actor.role.emoji} {actor.role.name}\n\n{actor.role.description}",
+                )
+            except Exception:
+                pass
+            actor.acted_this_cycle = True
+            return
         if actor.role.dual_check_or_kill:
             builder = InlineKeyboardBuilder()
             builder.button(
@@ -431,11 +458,28 @@ class GameEngine:
 
     async def _send_night_target_list(self, actor: PlayerState, action_type: "NightActionType"):
         builder = InlineKeyboardBuilder()
-        for target in self.alive_players():
+        if action_type == NightActionType.revive:
+            # Tiriltirish - o'lik o'yinchilar orasidan tanlanadi (tiriklar emas)
+            pool = [p for p in self.players.values() if not p.alive]
+        else:
+            pool = self.alive_players()
+        for target in pool:
             if target.user_id == actor.user_id and action_type == NightActionType.kill:
                 continue  # o'zini o'ldira olmaydi (oddiy qoida)
             builder.button(text=target.name, callback_data=f"night_act:{self.chat_id}:{target.user_id}")
         builder.adjust(1)
+        if not pool:
+            # Hech kim o'lmagan bo'lsa (tiriltirish uchun nishon yo'q) - bo'sh tugmalar
+            # ro'yxati yubormaymiz, shunchaki bu tun hech kim yo'qligini aytamiz.
+            try:
+                await self.bot.send_message(
+                    actor.user_id,
+                    f"🌙 {actor.role.emoji} {actor.role.name}: hozircha tanlash uchun hech kim yo'q.",
+                )
+            except Exception:
+                pass
+            actor.acted_this_cycle = True
+            return
         try:
             await self.bot.send_message(
                 actor.user_id,
@@ -451,6 +495,28 @@ class GameEngine:
         if not actor:
             return
         actor.acted_this_cycle = True
+
+        # Mafiya (yoki boshqa ko'p a'zoli) jamoa a'zolari bir-birining tungi tanlovini
+        # DARHOL, har safar (tanlovni o'zgartirsa ham) shaxsiy chatda ko'rib turishi
+        # uchun - jamoadoshlarga xabar yuboramiz (faqat kill/otish harakati uchun).
+        if actor.role and actor.role.team == RoleTeam.mafia:
+            effective_action = self.night_action_mode.get(actor_id, actor.role.night_action_type)
+            if effective_action == NightActionType.kill:
+                target = self.players.get(target_id)
+                teammates = [
+                    p for p in self.alive_players()
+                    if p.role and p.role.team == RoleTeam.mafia and p.user_id != actor.user_id
+                ]
+                if target and teammates:
+                    text = (
+                        f"🔪 Sherigingiz {actor.role.emoji} {actor.role.name} "
+                        f"({mention(actor.user_id, actor.name)}) — {mention(target.user_id, target.name)} ni tanladi."
+                    )
+                    for tm in teammates:
+                        try:
+                            await self.bot.send_message(tm.user_id, text)
+                        except Exception:
+                            pass
 
         # Rol harakat qilishi bilan DARHOL guruhga xabar beramiz (kimni nishonga
         # olgani oshkor qilinmaydi, faqat "shu rol harakat qildi" degan hikoya matni) --
@@ -482,6 +548,7 @@ class GameEngine:
         checked_info: list[tuple[int, int]] = []  # (checker_id, target_id)
         kill_entries: list[tuple[int, int, str]] = []  # (actor_id, target_id, team)
         block_entries: list[tuple[int, int]] = []  # (blocker_id, target_id)
+        revive_entries: list[tuple[int, int]] = []  # (reviver_id, target_id)
 
         for actor_id, target_id in self.night_actions.items():
             actor = self.players.get(actor_id)
@@ -498,6 +565,8 @@ class GameEngine:
                 checked_info.append((actor_id, target_id))
             elif action == NightActionType.block:
                 block_entries.append((actor_id, target_id))
+            elif action == NightActionType.revive:
+                revive_entries.append((actor_id, target_id))
 
         # Jamoa bo'lib harakat qiluvchilar uchun (masalan mafiyalar) - agar jamoada
         # "boshliq" (masalan Don) bo'lsa, OXIRGI qaror shunga tegishli bo'ladi; boshliq
@@ -558,8 +627,8 @@ class GameEngine:
             # ishlab turgani (qty>0 va yoqilgan bo'lsa) hujumdan qutqarib qoladi.
             saved_by = None
             for p_type in (
-                ProtectionType.qotildan_himoya, ProtectionType.doridan_himoya,
-                ProtectionType.qahramon_himoyasi,
+                ProtectionType.himoya, ProtectionType.qotildan_himoya,
+                ProtectionType.doridan_himoya, ProtectionType.qahramon_himoyasi,
             ):
                 if await crud.consume_protection(target_id, p_type):
                     saved_by = p_type
@@ -662,6 +731,39 @@ class GameEngine:
             except Exception:
                 pass
 
+        # Tiriltirish (revive): tanlangan o'lik o'yinchini qayta tirik qilib belgilaymiz.
+        # MUHIM TUZATISH: avval bu turdagi harakat umuman ishlanmasdi - rol nishon
+        # tanlasa ham hech kim qayta tirilmasdi.
+        for reviver_id, target_id in revive_entries:
+            target = self.players.get(target_id)
+            if not target:
+                continue
+            if target.alive:
+                try:
+                    await self.bot.send_message(
+                        reviver_id, f"✨ {target.name} allaqachon tirik edi — tiriltirish shart emas."
+                    )
+                except Exception:
+                    pass
+                continue
+            target.alive = True
+            try:
+                await self.bot.send_message(
+                    reviver_id, f"✨ Siz {target.name}ni tiriltirdingiz!"
+                )
+            except Exception:
+                pass
+            try:
+                await self.bot.send_message(target_id, "✨ Sizni kimdir tunda tiriltirdi — siz yana o'yindasiz!")
+            except Exception:
+                pass
+            try:
+                await self.bot.send_message(
+                    self.chat_id, f"✨ Mo''jiza bo'ldi — {mention(target.user_id, target.name)} qayta tirildi!"
+                )
+            except Exception:
+                pass
+
         if died:
             await self.bot.send_message(self.chat_id, await self._build_night_deaths_text(died))
             await self._process_succession(died)
@@ -754,11 +856,39 @@ class GameEngine:
             lines.append(line)
         return "\n".join(lines)
 
+    async def _apply_money_effects(self, phase: str):
+        """Admin rol panelida sozlagan '{phase}_money_target'/'{phase}_money_amount'
+        effektlarini qo'llaydi: 'self' - rol egasining o'ziga, 'all' - hozir TIRIK bo'lgan
+        HAMMA o'yinchiga pul qo'shadi. phase - 'night' yoki 'day'."""
+        target_attr = f"{phase}_money_target"
+        amount_attr = f"{phase}_money_amount"
+        alive = self.alive_players()
+        applied_any = False
+        for p in alive:
+            if not p.role:
+                continue
+            target = getattr(p.role, target_attr, None)
+            amount = getattr(p.role, amount_attr, 0) or 0
+            if not target or amount <= 0:
+                continue
+            applied_any = True
+            if target == "self":
+                await crud.update_user_balance(p.user_id, money_delta=amount)
+            elif target == "all":
+                for other in alive:
+                    await crud.update_user_balance(other.user_id, money_delta=amount)
+        if applied_any:
+            try:
+                await self.bot.send_message(self.chat_id, "💰 Ba'zi rollarning pul effekti ishga tushdi.")
+            except Exception:
+                pass
+
     # -------------------------------------------------------------------
     # KUN (muhokama + nominatsiya + ovoz berish)
     # -------------------------------------------------------------------
     async def run_day_phase(self):
         self.phase = "day"
+        await self._apply_money_effects("day")
         day_text = t("day_started", self.lang, day_number=self.day_number)
         await self._send_phase_media("day.mp4", "day.png", day_text)
         await self.bot.send_message(self.chat_id, self._day_roster_and_teams_text())
@@ -800,8 +930,8 @@ class GameEngine:
         if self.stopped:
             return
 
-        likes = sum(1 for v in self.votes.values() if v == "like")
-        dislikes = sum(1 for v in self.votes.values() if v == "dislike")
+        likes = sum(self._vote_weight(uid) for uid, v in self.votes.items() if v == "like")
+        dislikes = sum(self._vote_weight(uid) for uid, v in self.votes.items() if v == "dislike")
         self.vote_message_id = None
 
         if likes == dislikes:
@@ -810,7 +940,10 @@ class GameEngine:
             await self.bot.send_message(self.chat_id, t("vote_result", self.lang, likes=likes, dislikes=dislikes))
 
         if likes > dislikes:
-            if await crud.consume_protection(nominee.user_id, ProtectionType.osishdan_himoya):
+            saved_from_hanging = await crud.consume_protection(nominee.user_id, ProtectionType.osishdan_himoya)
+            if not saved_from_hanging:
+                saved_from_hanging = await crud.consume_protection(nominee.user_id, ProtectionType.himoya)
+            if saved_from_hanging:
                 await self.bot.send_message(
                     self.chat_id,
                     t("protection_hanging_saved", self.lang, name=mention(nominee.user_id, nominee.name)),
@@ -906,8 +1039,8 @@ class GameEngine:
             return None
 
         tally: dict[int, int] = {}
-        for nominee_id in self.nominations.values():
-            tally[nominee_id] = tally.get(nominee_id, 0) + 1
+        for voter_id, nominee_id in self.nominations.items():
+            tally[nominee_id] = tally.get(nominee_id, 0) + self._vote_weight(voter_id)
         max_votes = max(tally.values())
 
         if max_votes < 2 and len(tally) > 1:
@@ -922,6 +1055,14 @@ class GameEngine:
         top_candidates = [uid for uid, c in tally.items() if c == max_votes]
         winner_id = random.choice(top_candidates)
         return self.players.get(winner_id)
+
+    def _vote_weight(self, user_id: int) -> int:
+        """Admin rol panelida sozlangan 'day_vote_weight' - bu o'yinchining bitta ovozi
+        necha ovoz sifatida hisoblanishi. Rol yo'q/sozlanmagan bo'lsa - oddiy 1 ovoz."""
+        p = self.players.get(user_id)
+        if p and p.role:
+            return getattr(p.role, "day_vote_weight", None) or 1
+        return 1
 
     def register_nomination(self, voter_id: int, nominee_id: int):
         if not self.nomination_open:
@@ -953,8 +1094,8 @@ class GameEngine:
         """Like/dislike tugmalaridagi sonlarni jonli yangilaydi."""
         if not self.vote_message_id:
             return
-        likes = sum(1 for v in self.votes.values() if v == "like")
-        dislikes = sum(1 for v in self.votes.values() if v == "dislike")
+        likes = sum(self._vote_weight(uid) for uid, v in self.votes.items() if v == "like")
+        dislikes = sum(self._vote_weight(uid) for uid, v in self.votes.items() if v == "dislike")
         builder = InlineKeyboardBuilder()
         builder.button(text=f"👍 {likes}", callback_data=f"vote_like:{self.chat_id}")
         builder.button(text=f"👎 {dislikes}", callback_data=f"vote_dislike:{self.chat_id}")
@@ -974,8 +1115,15 @@ class GameEngine:
         MUHIM TUZATISH: oldin bu funksiya `await` qilinardi, shu sabab kun (yoki keyingi
         tun) o'lgan o'yinchi oxirgi so'zini yozib bo'lguncha (yoki LAST_WORDS_SECONDS vaqt
         o'tguncha) BOSHLANMAY turardi. Endi kun/tun darhol davom etadi, oxirgi so'z esa
-        orqa fonda kutib turiladi va kelib tushsa, kun DAVOMIDA guruhga yuboriladi."""
-        asyncio.create_task(self._handle_elimination_last_words(player, killed_at_night))
+        orqa fonda kutib turiladi va kelib tushsa, kun DAVOMIDA guruhga yuboriladi.
+
+        MUHIM TUZATISH: bu yerda oldin xom `asyncio.create_task` ishlatilardi -- unga
+        hech qanday kuchli havola saqlanmagani sabab, Python "chiqindi yig'uvchisi"
+        vazifa hali tugamasdanoq uni tasodifan bekor qilib qo'yishi (yoki xatolik chiqsa
+        buni HECH QAYERGA log qilmasdan jim yutib yuborishi) mumkin edi -- bu ayni o'sha
+        "o'yin sababsiz to'xtab qolyapti" degan shikoyatlarning bir manbai bo'lgan.
+        Endi `spawn_task` ishlatiladi -- u vazifani ushlab turadi va xatolik chiqsa log qiladi."""
+        spawn_task(self._handle_elimination_last_words(player, killed_at_night))
 
     async def _handle_elimination_last_words(self, player: PlayerState, killed_at_night: bool):
         from handlers.group.registration import LAST_WORDS_LISTENERS

@@ -43,6 +43,7 @@ class NightActionType(str, enum.Enum):
 
 
 class ProtectionType(str, enum.Enum):
+    himoya = "himoya"                       # umumiy himoya (tunda o'ldirilishdan ham, osishdan ham qutqaradi)
     osishdan_himoya = "osishdan_himoya"     # osishdan (linch/ovoz) himoya
     qotildan_himoya = "qotildan_himoya"     # tunda o'ldirilishdan himoya
     doridan_himoya = "doridan_himoya"       # zaharlanishdan himoya
@@ -214,6 +215,27 @@ class Role(Base):
     # 0 = do'kondan sotib olinmaydi. 0 dan katta bo'lsa - foydalanuvchi shuncha olmosga
     # ushbu rolni "band qilib" (reserve) qo'ya oladi va KEYINGI o'yinda shu rolda o'ynaydi.
 
+    # --- Admin o'zi sozlaydigan qo'shimcha KUNDUZGI/TUNGI effektlar ---
+    # Bular tayyor "bloklar" - admin har bir rol uchun panelda raqam/tanlov orqali
+    # o'zi belgilaydi, kodga qo'l tegmaydi. Shu bloklarni kombinatsiyalab istalgan
+    # rolni yasash mumkin (masalan "tunda hech narsa qilolmaydi, lekin kunduzi ovozi
+    # 2x" - night_action_type=none + day_vote_weight=2; yoki "hammaga pul tarqatadi" -
+    # day_money_target="all"; yoki "pul ishlab topadi" - night_money_target="self").
+    day_vote_weight: Mapped[int] = mapped_column(Integer, default=1)
+    # Kunduzgi ovoz berishda (kimni osish kerakligini nomzod qilish HAM, "yashasin/
+    # osilsin" deb ovoz berish HAM) bu rol egasining bitta ovozi necha ovoz sifatida
+    # hisoblanadi. Standart = 1 (oddiy ovoz). 2 qilinsa - "2x ovoz" bo'ladi.
+
+    night_money_target: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    night_money_amount: Mapped[int] = mapped_column(BigInteger, default=0)
+    day_money_target: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    day_money_amount: Mapped[int] = mapped_column(BigInteger, default=0)
+    # *_money_target: None = pul effekti yo'q; "self" = shu rol egasining O'ZIGA
+    # amount qadar pul qo'shiladi (masalan "pul ishlab topadigan" rol); "all" = shu
+    # payt TIRIK bo'lgan HAMMA o'yinchiga amount qadar pul ulashiladi (masalan
+    # "hammaga pul tarqatadigan" rol). night_* - tun tugaganda, day_* - kun
+    # boshlanganda ishlaydi.
+
 
 # ---------------------------------------------------------------------------
 # O'YIN REJIMLARI (nechta o'yinchi bo'lsa qaysi rejim avtomatik tanlanadi)
@@ -289,6 +311,19 @@ class DiamondTopupRequest(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     reviewed_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+# ---------------------------------------------------------------------------
+# GURUH A'ZOLARI (qaysi foydalanuvchi qaysi guruhda faol bo'lgani)
+# ---------------------------------------------------------------------------
+class GroupMember(Base):
+    __tablename__ = "group_members"
+    __table_args__ = (UniqueConstraint("chat_id", "user_id", name="uq_group_member"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    chat_id: Mapped[int] = mapped_column(BigInteger)
+    user_id: Mapped[int] = mapped_column(BigInteger)
+    last_seen: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
 # ---------------------------------------------------------------------------

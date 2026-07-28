@@ -101,7 +101,12 @@ async def on_night_action(callback: CallbackQuery):
         await callback.answer("❌ O'yin allaqachon tugagan.", show_alert=True)
         return
     await engine.register_night_action(callback.from_user.id, target_id)
-    await callback.message.edit_text("✅ Tanlovingiz qabul qilindi.")
+    target = engine.players.get(target_id)
+    target_name = target.name if target else "?"
+    try:
+        await callback.message.edit_text(f"✅ Siz {target_name} ni tanladingiz.")
+    except Exception:
+        pass
     await callback.answer()
 
 

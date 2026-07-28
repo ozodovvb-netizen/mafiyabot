@@ -9,6 +9,8 @@ Guruh uchun qo'shimcha buyruqlar:
   /mgive          - kimgadir reply qilib pul hadya qilish (yoki "100-10" ko'rinishida - giveaway, faqat admin)
   /change         - /gsend bilan bir xil (olmos), giveaway rejimida ham ishlaydi
   /vsgame  - jamoaviy (versus) o'yin rejimi
+  /paratop - shu GURUHDA faol, jinsi belgilangan foydalanuvchilar orasidan darhol
+             (tasdiqsiz) tasodifiy qarama-qarshi jinsdagi juftlik tanlab e'lon qiladi
 """
 import logging
 import asyncio
@@ -23,9 +25,10 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from config import MIN_PLAYERS
 import config
 from database import crud
+from database.models import GenderEnum
 from game.engine import ACTIVE_GAMES
 from keyboards.common_kb import language_kb
-from utils.helpers import spawn_task
+from utils.helpers import spawn_task, mention
 
 router = Router(name="group_commands_extra")
 logger = logging.getLogger(__name__)
@@ -362,6 +365,37 @@ async def cmd_boylar(message: Message):
         f"{diamond_lines}"
     )
     await message.answer(text)
+
+
+@router.message(Command("paratop"), F.chat.type.in_({"group", "supergroup"}))
+async def cmd_paratop(message: Message):
+    """Guruh ICHIDA ishlaydi: faqat shu guruhda faol bo'lgan (kamida bitta xabar
+    yozgan) va jinsi belgilangan foydalanuvchilar orasidan tasodifiy erkak+ayol
+    juftligini DARHOL (tasdiqsiz) tanlab, guruhga ikkalasining ham user-tag'i
+    bilan e'lon qiladi. Botning shaxsiy chatidagi "juftlik topish" (/find_partner)
+    funksiyasidan farqi -- bu butun bot bo'yicha emas, faqat shu guruh doirasida
+    ishlaydi va so'rov/tasdiq kutmaydi."""
+    males = await crud.get_group_members_by_gender(message.chat.id, GenderEnum.male)
+    females = await crud.get_group_members_by_gender(message.chat.id, GenderEnum.female)
+
+    if not males or not females:
+        await message.answer(
+            "❌ Juftlik tuzish uchun yetarli emas — bu guruhda kamida bitta jinsi "
+            "belgilangan erkak VA bitta ayol foydalanuvchi kerak. Jinsni "
+            "/profile → \"Jinsni o'zgartirish\" orqali belgilash mumkin."
+        )
+        return
+
+    man = random.choice(males)
+    woman = random.choice(females)
+    man_name = man.first_name or (f"@{man.username}" if man.username else str(man.id))
+    woman_name = woman.first_name or (f"@{woman.username}" if woman.username else str(woman.id))
+
+    await message.answer(
+        f"💘 <b>Bugungi tasodifiy juftlik:</b>\n\n"
+        f"{mention(man.id, man_name)} ❤️ {mention(woman.id, woman_name)}\n\n"
+        "Tabriklaymiz! 🎉"
+    )
 
 
 @router.message(Command("vsgame"), F.chat.type.in_({"group", "supergroup"}))

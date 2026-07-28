@@ -139,6 +139,20 @@ def role_view_kb(role) -> InlineKeyboardMarkup:
         callback_data=f"role_edit_toggle:{role.id}:dual_check_or_kill",
     )
     builder.button(text=f"🔢 Bittaga soni: {role.max_per_game}", callback_data=f"role_edit_max:{role.id}")
+    builder.button(
+        text=f"🗳 Kunduzgi ovoz kuchi: {role.day_vote_weight}x",
+        callback_data=f"role_edit_vote_weight:{role.id}",
+    )
+    night_money_label = "➖ Yo'q" if not role.night_money_target else (
+        f"🙋 O'ziga {role.night_money_amount}$" if role.night_money_target == "self"
+        else f"👥 Hammaga {role.night_money_amount}$"
+    )
+    builder.button(text=f"🌙💰 Tungi pul effekti: {night_money_label}", callback_data=f"role_edit_money_open:{role.id}:night")
+    day_money_label = "➖ Yo'q" if not role.day_money_target else (
+        f"🙋 O'ziga {role.day_money_amount}$" if role.day_money_target == "self"
+        else f"👥 Hammaga {role.day_money_amount}$"
+    )
+    builder.button(text=f"☀️💰 Kunduzgi pul effekti: {day_money_label}", callback_data=f"role_edit_money_open:{role.id}:day")
     builder.button(text=f"💎 Sotib olish narxi: {role.price_diamond}", callback_data=f"role_edit_price:{role.id}")
     builder.button(text=f"🎲 Rejim: {role.mode}", callback_data=f"role_edit_mode:{role.id}")
     builder.button(text="✍️ Tavsifni o'zgartirish", callback_data=f"role_edit_desc:{role.id}")
@@ -161,6 +175,17 @@ def role_team_edit_kb(role_id: int) -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
+def role_money_target_kb(role_id: int, phase: str) -> InlineKeyboardMarkup:
+    """phase: 'night' yoki 'day'. Admin shu rol uchun pul effekti turini tanlaydi."""
+    builder = InlineKeyboardBuilder()
+    builder.button(text="➖ Effekt yo'q", callback_data=f"role_edit_money_set:{role_id}:{phase}:none")
+    builder.button(text="🙋 O'ziga (pul ishlab topadi)", callback_data=f"role_edit_money_set:{role_id}:{phase}:self")
+    builder.button(text="👥 Hammaga (pul tarqatadi)", callback_data=f"role_edit_money_set:{role_id}:{phase}:all")
+    builder.button(text="↩️ Bekor qilish", callback_data=f"adm_role:view:{role_id}")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
 def role_action_edit_kb(role_id: int) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for code, name in ROLE_ACTION_LABELS:
@@ -173,6 +198,7 @@ def role_action_edit_kb(role_id: int) -> InlineKeyboardMarkup:
 def protection_type_select_kb() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     types = [
+        ("himoya", "🛡 Himoya (umumiy)"),
         ("hujjat", "📄 Hujjat"), ("osishdan_himoya", "🪂 Osishdan himoya"),
         ("qotildan_himoya", "🩸 Qotildan himoya"), ("miltiq", "🔫 Miltiq"),
         ("doridan_himoya", "🧪 Doridan himoya"), ("maska", "🎭 Maska"),
@@ -180,6 +206,40 @@ def protection_type_select_kb() -> InlineKeyboardMarkup:
     ]
     for code, name in types:
         builder.button(text=name, callback_data=f"protection_type:{code}")
+    builder.adjust(2)
+    return builder.as_markup()
+
+
+def mode_roles_view_kb(mode_idx: int, roles_in_mode: list, assignable_roles: list) -> InlineKeyboardMarkup:
+    """Bitta rejimga tegishli rollarni ko'rsatadi (soni bilan) va shu rejimga
+    boshqa (hozircha unga tegishli bo'lmagan) rolni qo'shish imkonini beradi."""
+    builder = InlineKeyboardBuilder()
+    for r in roles_in_mode:
+        builder.button(
+            text=f"{r.emoji} {r.name} — {r.max_per_game} dona",
+            callback_data=f"adm_role:view:{r.id}",
+        )
+    for r in assignable_roles:
+        builder.button(
+            text=f"➕ {r.emoji} {r.name} (hozir: {r.mode})",
+            callback_data=f"adm_mode:assign:{mode_idx}:{r.id}",
+        )
+    builder.button(text="↩️ Orqaga", callback_data="adm:game_modes")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def game_mode_pick_kb(names: list[str], callback_prefix: str, back_target: str = "adm:roles") -> InlineKeyboardMarkup:
+    """Rol uchun rejim tanlashda ERKIN MATN o'rniga TUGMA orqali tanlash --
+    aks holda admin bir marta "classic" o'rniga "klassik" deb yozib qo'ysa,
+    o'sha rol hech qachon o'yinga tanlanmay qolib ketardi (imlo xatosi).
+    `names` -- crud.get_mode_names() dan olingan, allaqachon tozalangan
+    (dublikatsiz) ro'yxat bo'lishi kerak; callback'da shu ro'yxatdagi INDEX
+    ishlatiladi (rejim nomida ':' yoki uzun matn bo'lsa ham muammo chiqmasin uchun)."""
+    builder = InlineKeyboardBuilder()
+    for idx, name in enumerate(names):
+        builder.button(text=f"🎲 {name}", callback_data=f"{callback_prefix}:{idx}")
+    builder.button(text="↩️ Bekor qilish", callback_data=back_target)
     builder.adjust(2)
     return builder.as_markup()
 

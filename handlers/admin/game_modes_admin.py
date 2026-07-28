@@ -12,7 +12,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from database import crud
-from keyboards.admin_kb import back_admin_kb
+from keyboards.admin_kb import back_admin_kb, mode_roles_view_kb
 from states.states import AdminGameMode
 from utils.helpers import is_user_admin
 
@@ -25,8 +25,11 @@ async def adm_modes_list(callback: CallbackQuery):
         await callback.answer()
         return
     modes = await crud.get_game_modes(active_only=False)
+    names = await crud.get_mode_names(active_only=False)
 
     builder = InlineKeyboardBuilder()
+    for idx, name in enumerate(names):
+        builder.button(text=f"🎭 {name} — rollarni ko'rish", callback_data=f"adm_mode:view:{idx}")
     for m in modes:
         builder.button(
             text=f"🗑 {m.name} ({m.min_players}-{m.max_players})",
@@ -39,13 +42,78 @@ async def adm_modes_list(callback: CallbackQuery):
     text = (
         "🎲 <b>O'yin rejimlari</b>\n\n"
         "O'yin boshlanganda o'yinchilar soniga qarab shu rejimlardan biri avtomatik "
-        "tanlanadi va faqat o'sha rejimga tegishli rollar ishlatiladi "
-        "('Rollar' bo'limida rol qo'shganda rejim tanlanadi).\n\n"
+        "tanlanadi va faqat o'sha rejimga tegishli rollar ishlatiladi. "
+        "Har bir rejimga qaysi rollar va nechta donadan kirishini \"rollarni ko'rish\" "
+        "tugmasi orqali belgilashingiz mumkin.\n\n"
         "Hech qanday oraliqqa to'g'ri kelmasa - \"classic\" rejimi ishlatiladi.\n\n"
         + ("\n".join(f"• <b>{m.name}</b>: {m.min_players}-{m.max_players} kishi" for m in modes) or "— hozircha rejim yo'q —")
     )
     await callback.message.edit_text(text, reply_markup=builder.as_markup())
     await callback.answer()
+
+
+@router.callback_query(F.data.startswith("adm_mode:view:"))
+async def adm_mode_view_roles(callback: CallbackQuery):
+    if not await is_user_admin(callback.from_user.id):
+        await callback.answer()
+        return
+    idx = int(callback.data.split(":")[-1])
+    await _render_mode_roles(callback, idx)
+    await callback.answer()
+
+
+async def _render_mode_roles(callback: CallbackQuery, idx: int):
+    names = await crud.get_mode_names(active_only=False)
+    if not (0 <= idx < len(names)):
+        await callback.answer("❌ Bu rejim topilmadi.", show_alert=True)
+        return
+    mode_name = names[idx]
+
+    roles_in_mode = await crud.get_roles_for_mode(mode_name, active_only=False)
+    all_roles = await crud.get_roles(active_only=False)
+    in_mode_ids = {r.id for r in roles_in_mode}
+    assignable_roles = [r for r in all_roles if r.id not in in_mode_ids]
+
+    roles_text = (
+        "\n".join(f"• {r.emoji} {r.name} — {r.max_per_game} dona" for r in roles_in_mode)
+        if roles_in_mode else "— hozircha bu rejimga hech qanday rol biriktirilmagan —"
+    )
+    await callback.message.edit_text(
+        f"🎲 <b>{mode_name}</b> rejimiga tegishli rollar:\n\n{roles_text}\n\n"
+        "Rolni bosib uning sonini yoki boshqa sozlamalarini o'zgartirishingiz mumkin. "
+        "Boshqa rejimdagi rolni shu rejimga qo'shish uchun pastdagi \"➕\" tugmalaridan foydalaning "
+        "(rol faqat BITTA rejimga tegishli bo'ladi, qo'shilganda eski rejimidan chiqadi):",
+        reply_markup=mode_roles_view_kb(idx, roles_in_mode, assignable_roles),
+    )
+
+
+@router.callback_query(F.data.startswith("adm_mode:assign:"))
+async def adm_mode_assign_role(callback: CallbackQuery):
+    if not await is_user_admin(callback.from_user.id):
+        await callback.answer()
+        return
+    _, _, idx_s, role_id_s = callback.data.split(":")
+    idx, role_id = int(idx_s), int(role_id_s)
+    names = await crud.get_mode_names(active_only=False)
+    if not (0 <= idx < len(names)):
+        await callback.answer("❌ Bu rejim topilmadi.", show_alert=True)
+        return
+    mode_name = names[idx]
+
+    role = await crud.get_role(role_id)
+    if not role:
+        await callback.answer("❌ Bu rol topilmadi.", show_alert=True)
+        return
+    if await crud.role_name_exists_in_mode(role.name, mode_name, exclude_id=role_id):
+        await callback.answer(
+            f"⚠️ \"{role.name}\" nomli rol \"{mode_name}\" rejimida allaqachon mavjud.",
+            show_alert=True,
+        )
+        return
+
+    await crud.update_role(role_id, mode=mode_name)
+    await _render_mode_roles(callback, idx)
+    await callback.answer(f"✅ {role.name} endi \"{mode_name}\" rejimiga tegishli.")
 
 
 @router.callback_query(F.data.startswith("adm_mode:del:"))
