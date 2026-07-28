@@ -89,6 +89,7 @@ def role_team_select_kb() -> InlineKeyboardMarkup:
     builder.button(text="🔪 Mafiya", callback_data="role_team:mafia")
     builder.button(text="🕊 Tinch aholi", callback_data="role_team:peaceful")
     builder.button(text="🎯 Yakka", callback_data="role_team:solo")
+    builder.button(text="↩️ Bekor qilish", callback_data="adm:roles")
     builder.adjust(1)
     return builder.as_markup()
 
@@ -105,6 +106,7 @@ def role_action_select_kb() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     for code, name in ROLE_ACTION_LABELS:
         builder.button(text=name, callback_data=f"role_action:{code}")
+    builder.button(text="↩️ Bekor qilish", callback_data="adm:roles")
     builder.adjust(2)
     return builder.as_markup()
 
@@ -206,18 +208,29 @@ def protection_type_select_kb() -> InlineKeyboardMarkup:
     ]
     for code, name in types:
         builder.button(text=name, callback_data=f"protection_type:{code}")
+    builder.button(text="↩️ Bekor qilish", callback_data="adm:shop")
     builder.adjust(2)
     return builder.as_markup()
 
 
 def mode_roles_view_kb(mode_idx: int, roles_in_mode: list, assignable_roles: list) -> InlineKeyboardMarkup:
     """Bitta rejimga tegishli rollarni ko'rsatadi (soni bilan) va shu rejimga
-    boshqa (hozircha unga tegishli bo'lmagan) rolni qo'shish imkonini beradi."""
+    boshqa (hozircha unga tegishli bo'lmagan) rolni qo'shish imkonini beradi.
+    Har bir rol uchun to'g'ridan-to'g'ri shu ekrandan O'CHIRISH va BOSHQA
+    REJIMGA O'TKAZISH tugmalari ham beriladi (to'liq rol tahririga kirmasdan)."""
     builder = InlineKeyboardBuilder()
     for r in roles_in_mode:
         builder.button(
             text=f"{r.emoji} {r.name} — {r.max_per_game} dona",
             callback_data=f"adm_role:view:{r.id}",
+        )
+        builder.button(
+            text="➡️ Boshqa rejimga o'tkazish",
+            callback_data=f"adm_mode:role_move:{mode_idx}:{r.id}",
+        )
+        builder.button(
+            text=f"🗑 {r.name} ni o'chirish",
+            callback_data=f"adm_mode:role_del:{mode_idx}:{r.id}",
         )
     for r in assignable_roles:
         builder.button(

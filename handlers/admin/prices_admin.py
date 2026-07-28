@@ -13,10 +13,11 @@ router = Router(name="prices_admin")
 
 # --- Pul (Dollar) paketlari (Olmos evaziga Dollar sotib olish narxlari) ---
 @router.callback_query(F.data == "adm:money_prices")
-async def adm_money_prices_list(callback: CallbackQuery):
+async def adm_money_prices_list(callback: CallbackQuery, state: FSMContext):
     if not await is_user_admin(callback.from_user.id):
         await callback.answer()
         return
+    await state.clear()
     packages = await crud.get_money_packages(active_only=False)
     await callback.message.edit_text(
         "💵 <b>Pul (Dollar) paketlari</b>\n\nOlmos evaziga qancha Dollar berilishini sozlang:",
@@ -59,11 +60,11 @@ async def adm_money_pkg_amount(message: Message, state: FSMContext):
     if not await is_user_admin(message.from_user.id):
         return
     if not message.text.strip().isdigit():
-        await message.answer("❌ Faqat raqam yuboring.")
+        await message.answer("❌ Faqat raqam yuboring.", reply_markup=back_admin_kb("adm:money_prices"))
         return
     await state.update_data(money_amount=int(message.text.strip()))
     await state.set_state(AdminMoneyPackage.waiting_diamond_price)
-    await message.answer("💎 Necha Olmosga sotiladi?")
+    await message.answer("💎 Necha Olmosga sotiladi?", reply_markup=back_admin_kb("adm:money_prices"))
 
 
 @router.message(AdminMoneyPackage.waiting_diamond_price)
@@ -71,7 +72,7 @@ async def adm_money_pkg_price(message: Message, state: FSMContext):
     if not await is_user_admin(message.from_user.id):
         return
     if not message.text.strip().isdigit():
-        await message.answer("❌ Faqat raqam yuboring.")
+        await message.answer("❌ Faqat raqam yuboring.", reply_markup=back_admin_kb("adm:money_prices"))
         return
     data = await state.get_data()
     await crud.create_money_package(money_amount=data["money_amount"], diamond_price=int(message.text.strip()))
@@ -85,10 +86,11 @@ async def adm_money_pkg_price(message: Message, state: FSMContext):
 
 # --- Olmos paketlari (karta orqali sotib olish narxlari) ---
 @router.callback_query(F.data == "adm:diamond_prices")
-async def adm_diamond_prices_list(callback: CallbackQuery):
+async def adm_diamond_prices_list(callback: CallbackQuery, state: FSMContext):
     if not await is_user_admin(callback.from_user.id):
         await callback.answer()
         return
+    await state.clear()
     packages = await crud.get_diamond_packages(active_only=False)
     await callback.message.edit_text(
         "💎 <b>Olmos paketlari</b>\n\nKarta orqali necha so'mga nechta olmos berilishini sozlang:",
@@ -131,11 +133,11 @@ async def adm_diamond_pkg_price(message: Message, state: FSMContext):
     if not await is_user_admin(message.from_user.id):
         return
     if not message.text.strip().isdigit():
-        await message.answer("❌ Faqat raqam yuboring.")
+        await message.answer("❌ Faqat raqam yuboring.", reply_markup=back_admin_kb("adm:diamond_prices"))
         return
     await state.update_data(price_sum=int(message.text.strip()))
     await state.set_state(AdminDiamondPackage.waiting_diamond_amount)
-    await message.answer("💎 Nechta olmos beriladi?")
+    await message.answer("💎 Nechta olmos beriladi?", reply_markup=back_admin_kb("adm:diamond_prices"))
 
 
 @router.message(AdminDiamondPackage.waiting_diamond_amount)
@@ -143,7 +145,7 @@ async def adm_diamond_pkg_amount(message: Message, state: FSMContext):
     if not await is_user_admin(message.from_user.id):
         return
     if not message.text.strip().isdigit():
-        await message.answer("❌ Faqat raqam yuboring.")
+        await message.answer("❌ Faqat raqam yuboring.", reply_markup=back_admin_kb("adm:diamond_prices"))
         return
     data = await state.get_data()
     await crud.create_diamond_package(price_sum=data["price_sum"], diamond_amount=int(message.text.strip()))

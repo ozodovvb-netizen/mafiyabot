@@ -28,7 +28,7 @@ async def search_user_by_id(message: Message, state: FSMContext):
     if not await is_user_admin(message.from_user.id):
         return
     if not message.text or not message.text.strip().isdigit():
-        await message.answer("❌ Iltimos, faqat raqam (ID) yuboring.")
+        await message.answer("❌ Iltimos, faqat raqam (ID) yuboring.", reply_markup=back_admin_kb())
         return
 
     user_id = int(message.text.strip())
@@ -45,6 +45,24 @@ async def search_user_by_id(message: Message, state: FSMContext):
     )
 
 
+@router.callback_query(F.data.startswith("adm:user_view:"))
+async def adm_user_view(callback: CallbackQuery, state: FSMContext):
+    if not await is_user_admin(callback.from_user.id):
+        await callback.answer()
+        return
+    await state.clear()
+    user_id = int(callback.data.split(":")[-1])
+    user = await crud.get_user(user_id)
+    if not user:
+        await callback.answer("❌ Bunday foydalanuvchi topilmadi.", show_alert=True)
+        return
+    await callback.message.edit_text(
+        format_user_profile_admin(user, user.username),
+        reply_markup=user_management_kb(user_id),
+    )
+    await callback.answer()
+
+
 @router.callback_query(F.data.startswith("adm:user_money_add:"))
 async def ask_money_add(callback: CallbackQuery, state: FSMContext):
     if not await is_user_admin(callback.from_user.id):
@@ -53,7 +71,10 @@ async def ask_money_add(callback: CallbackQuery, state: FSMContext):
     user_id = int(callback.data.split(":")[-1])
     await state.set_state(AdminUserSearch.waiting_money_amount)
     await state.update_data(target_user_id=user_id, op="add")
-    await callback.message.answer(f"➕ {user_id} ga qancha pul qo'shamiz? Raqam yuboring:")
+    await callback.message.answer(
+        f"➕ {user_id} ga qancha pul qo'shamiz? Raqam yuboring:",
+        reply_markup=back_admin_kb(f"adm:user_view:{user_id}"),
+    )
     await callback.answer()
 
 
@@ -65,7 +86,10 @@ async def ask_money_sub(callback: CallbackQuery, state: FSMContext):
     user_id = int(callback.data.split(":")[-1])
     await state.set_state(AdminUserSearch.waiting_money_amount)
     await state.update_data(target_user_id=user_id, op="sub")
-    await callback.message.answer(f"➖ {user_id} dan qancha pul ayiramiz? Raqam yuboring:")
+    await callback.message.answer(
+        f"➖ {user_id} dan qancha pul ayiramiz? Raqam yuboring:",
+        reply_markup=back_admin_kb(f"adm:user_view:{user_id}"),
+    )
     await callback.answer()
 
 
@@ -73,10 +97,13 @@ async def ask_money_sub(callback: CallbackQuery, state: FSMContext):
 async def apply_money_change(message: Message, state: FSMContext):
     if not await is_user_admin(message.from_user.id):
         return
-    if not message.text or not message.text.strip().lstrip("-").isdigit():
-        await message.answer("❌ Faqat raqam yuboring.")
-        return
     data = await state.get_data()
+    if not message.text or not message.text.strip().lstrip("-").isdigit():
+        await message.answer(
+            "❌ Faqat raqam yuboring.",
+            reply_markup=back_admin_kb(f"adm:user_view:{data.get('target_user_id', '')}"),
+        )
+        return
     amount = int(message.text.strip())
     if data["op"] == "sub":
         amount = -amount
@@ -97,7 +124,10 @@ async def ask_diamond_add(callback: CallbackQuery, state: FSMContext):
     user_id = int(callback.data.split(":")[-1])
     await state.set_state(AdminUserSearch.waiting_diamond_amount)
     await state.update_data(target_user_id=user_id, op="add")
-    await callback.message.answer(f"➕ {user_id} ga qancha olmos qo'shamiz? Raqam yuboring:")
+    await callback.message.answer(
+        f"➕ {user_id} ga qancha olmos qo'shamiz? Raqam yuboring:",
+        reply_markup=back_admin_kb(f"adm:user_view:{user_id}"),
+    )
     await callback.answer()
 
 
@@ -109,7 +139,10 @@ async def ask_diamond_sub(callback: CallbackQuery, state: FSMContext):
     user_id = int(callback.data.split(":")[-1])
     await state.set_state(AdminUserSearch.waiting_diamond_amount)
     await state.update_data(target_user_id=user_id, op="sub")
-    await callback.message.answer(f"➖ {user_id} dan qancha olmos ayiramiz? Raqam yuboring:")
+    await callback.message.answer(
+        f"➖ {user_id} dan qancha olmos ayiramiz? Raqam yuboring:",
+        reply_markup=back_admin_kb(f"adm:user_view:{user_id}"),
+    )
     await callback.answer()
 
 
@@ -117,10 +150,13 @@ async def ask_diamond_sub(callback: CallbackQuery, state: FSMContext):
 async def apply_diamond_change(message: Message, state: FSMContext):
     if not await is_user_admin(message.from_user.id):
         return
-    if not message.text or not message.text.strip().lstrip("-").isdigit():
-        await message.answer("❌ Faqat raqam yuboring.")
-        return
     data = await state.get_data()
+    if not message.text or not message.text.strip().lstrip("-").isdigit():
+        await message.answer(
+            "❌ Faqat raqam yuboring.",
+            reply_markup=back_admin_kb(f"adm:user_view:{data.get('target_user_id', '')}"),
+        )
+        return
     amount = int(message.text.strip())
     if data["op"] == "sub":
         amount = -amount

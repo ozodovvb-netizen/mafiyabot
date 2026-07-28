@@ -12,7 +12,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from database import crud
-from keyboards.admin_kb import back_admin_kb, mode_roles_view_kb
+from keyboards.admin_kb import back_admin_kb, mode_roles_view_kb, game_mode_pick_kb
 from states.states import AdminGameMode
 from utils.helpers import is_user_admin
 
@@ -20,10 +20,11 @@ router = Router(name="game_modes_admin")
 
 
 @router.callback_query(F.data == "adm:game_modes")
-async def adm_modes_list(callback: CallbackQuery):
+async def adm_modes_list(callback: CallbackQuery, state: FSMContext):
     if not await is_user_admin(callback.from_user.id):
         await callback.answer()
         return
+    await state.clear()
     modes = await crud.get_game_modes(active_only=False)
     names = await crud.get_mode_names(active_only=False)
 
@@ -116,15 +117,84 @@ async def adm_mode_assign_role(callback: CallbackQuery):
     await callback.answer(f"✅ {role.name} endi \"{mode_name}\" rejimiga tegishli.")
 
 
+@router.callback_query(F.data.startswith("adm_mode:role_del:"))
+async def adm_mode_role_delete(callback: CallbackQuery):
+    """Rejim ichidan, to'liq rol tahririga kirmasdan, rolni butunlay o'chiradi."""
+    if not await is_user_admin(callback.from_user.id):
+        await callback.answer()
+        return
+    _, _, idx_s, role_id_s = callback.data.split(":")
+    idx, role_id = int(idx_s), int(role_id_s)
+    role = await crud.get_role(role_id)
+    role_name = role.name if role else "Rol"
+    await crud.delete_role(role_id)
+    await _render_mode_roles(callback, idx)
+    await callback.answer(f"🗑 {role_name} o'chirildi")
+
+
+@router.callback_query(F.data.startswith("adm_mode:role_move:"))
+async def adm_mode_role_move_start(callback: CallbackQuery):
+    """Rejim ichidan rolni boshqa rejimga o'tkazish uchun yangi rejimni tanlash."""
+    if not await is_user_admin(callback.from_user.id):
+        await callback.answer()
+        return
+    _, _, idx_s, role_id_s = callback.data.split(":")
+    idx, role_id = int(idx_s), int(role_id_s)
+    role = await crud.get_role(role_id)
+    if not role:
+        await callback.answer("❌ Bu rol topilmadi.", show_alert=True)
+        return
+    names = await crud.get_mode_names(active_only=False)
+    await callback.message.edit_text(
+        f"➡️ \"{role.name}\" rolini qaysi rejimga o'tkazmoqchisiz?",
+        reply_markup=game_mode_pick_kb(
+            names,
+            f"adm_mode:role_move_pick:{idx}:{role_id}",
+            back_target=f"adm_mode:view:{idx}",
+        ),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("adm_mode:role_move_pick:"))
+async def adm_mode_role_move_save(callback: CallbackQuery):
+    """Tanlangan yangi rejimga rolni o'tkazadi va o'sha (yangi) rejim ro'yxatini ko'rsatadi."""
+    if not await is_user_admin(callback.from_user.id):
+        await callback.answer()
+        return
+    _, _, old_idx_s, role_id_s, new_idx_s = callback.data.split(":")
+    old_idx, role_id, new_idx = int(old_idx_s), int(role_id_s), int(new_idx_s)
+    names = await crud.get_mode_names(active_only=False)
+    if not (0 <= new_idx < len(names)):
+        await callback.answer("❌ Bu rejim topilmadi.", show_alert=True)
+        return
+    new_mode_name = names[new_idx]
+
+    role = await crud.get_role(role_id)
+    if not role:
+        await callback.answer("❌ Bu rol topilmadi.", show_alert=True)
+        return
+    if await crud.role_name_exists_in_mode(role.name, new_mode_name, exclude_id=role_id):
+        await callback.answer(
+            f"⚠️ \"{role.name}\" nomli rol \"{new_mode_name}\" rejimida allaqachon mavjud.",
+            show_alert=True,
+        )
+        return
+
+    await crud.update_role(role_id, mode=new_mode_name)
+    await _render_mode_roles(callback, new_idx)
+    await callback.answer(f"✅ {role.name} \"{new_mode_name}\" rejimiga o'tkazildi.")
+
+
 @router.callback_query(F.data.startswith("adm_mode:del:"))
-async def adm_mode_delete(callback: CallbackQuery):
+async def adm_mode_delete(callback: CallbackQuery, state: FSMContext):
     if not await is_user_admin(callback.from_user.id):
         await callback.answer()
         return
     mode_id = int(callback.data.split(":")[-1])
     await crud.delete_game_mode(mode_id)
     await callback.answer("🗑 O'chirildi")
-    await adm_modes_list(callback)
+    await adm_modes_list(callback, state)
 
 
 @router.callback_query(F.data == "adm_mode:add")
@@ -146,7 +216,10 @@ async def adm_mode_name(message: Message, state: FSMContext):
         return
     await state.update_data(name=message.text.strip().lower())
     await state.set_state(AdminGameMode.waiting_min_players)
-    await message.answer("👥 Bu rejim uchun eng kam o'yinchi soni nechta?")
+    await message.answer(
+        "👥 Bu rejim uchun eng kam o'yinchi soni nechta?",
+        reply_markup=back_admin_kb("adm:game_modes"),
+    )
 
 
 @router.message(AdminGameMode.waiting_min_players)
@@ -154,11 +227,14 @@ async def adm_mode_min(message: Message, state: FSMContext):
     if not await is_user_admin(message.from_user.id):
         return
     if not message.text.strip().isdigit():
-        await message.answer("❌ Faqat raqam yuboring.")
+        await message.answer("❌ Faqat raqam yuboring.", reply_markup=back_admin_kb("adm:game_modes"))
         return
     await state.update_data(min_players=int(message.text.strip()))
     await state.set_state(AdminGameMode.waiting_max_players)
-    await message.answer("👥 Bu rejim uchun eng ko'p o'yinchi soni nechta?")
+    await message.answer(
+        "👥 Bu rejim uchun eng ko'p o'yinchi soni nechta?",
+        reply_markup=back_admin_kb("adm:game_modes"),
+    )
 
 
 @router.message(AdminGameMode.waiting_max_players)
@@ -166,7 +242,7 @@ async def adm_mode_max(message: Message, state: FSMContext):
     if not await is_user_admin(message.from_user.id):
         return
     if not message.text.strip().isdigit():
-        await message.answer("❌ Faqat raqam yuboring.")
+        await message.answer("❌ Faqat raqam yuboring.", reply_markup=back_admin_kb("adm:game_modes"))
         return
     data = await state.get_data()
     await crud.create_game_mode(

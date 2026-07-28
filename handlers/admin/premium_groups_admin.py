@@ -12,10 +12,11 @@ router = Router(name="premium_groups_admin")
 
 
 @router.callback_query(F.data == "adm:premium_groups")
-async def adm_pg_choose_country(callback: CallbackQuery):
+async def adm_pg_choose_country(callback: CallbackQuery, state: FSMContext):
     if not await is_user_admin(callback.from_user.id):
         await callback.answer()
         return
+    await state.clear()
     await callback.message.edit_text(
         "🌍 Qaysi davlat/til uchun premium guruhlar ro'yxatini ko'rmoqchisiz yoki qo'shmoqchisiz?",
         reply_markup=language_pick_for_group_kb(),
@@ -29,6 +30,7 @@ async def adm_pg_list(callback: CallbackQuery, state: FSMContext):
         await callback.answer()
         return
     country = callback.data.split(":", 1)[1]
+    await state.clear()
     await state.update_data(pg_country=country)
     groups = await crud.get_premium_groups(country, active_only=False)
     await callback.message.edit_text(
@@ -60,8 +62,13 @@ async def adm_pg_add_start(callback: CallbackQuery, state: FSMContext):
     if not await is_user_admin(callback.from_user.id):
         await callback.answer()
         return
+    data = await state.get_data()
+    country = data.get("pg_country", "uz")
     await state.set_state(AdminPremiumGroup.waiting_name)
-    await callback.message.edit_text("📝 Guruh nomini kiriting:", reply_markup=back_admin_kb("adm:premium_groups"))
+    await callback.message.edit_text(
+        "📝 Guruh nomini kiriting:",
+        reply_markup=back_admin_kb(f"pg_country:{country}"),
+    )
     await callback.answer()
 
 
@@ -71,7 +78,12 @@ async def adm_pg_name(message: Message, state: FSMContext):
         return
     await state.update_data(name=message.text.strip())
     await state.set_state(AdminPremiumGroup.waiting_link)
-    await message.answer("🔗 Guruh linkini kiriting (masalan https://t.me/+xxxxx):")
+    data = await state.get_data()
+    country = data.get("pg_country", "uz")
+    await message.answer(
+        "🔗 Guruh linkini kiriting (masalan https://t.me/+xxxxx):",
+        reply_markup=back_admin_kb(f"pg_country:{country}"),
+    )
 
 
 @router.message(AdminPremiumGroup.waiting_link)
@@ -80,19 +92,24 @@ async def adm_pg_link(message: Message, state: FSMContext):
         return
     await state.update_data(link=message.text.strip())
     await state.set_state(AdminPremiumGroup.waiting_rank)
-    await message.answer("💎 Reyting/olmos qiymatini kiriting (katta son - tepada chiqadi):")
+    data = await state.get_data()
+    country = data.get("pg_country", "uz")
+    await message.answer(
+        "💎 Reyting/olmos qiymatini kiriting (katta son - tepada chiqadi):",
+        reply_markup=back_admin_kb(f"pg_country:{country}"),
+    )
 
 
 @router.message(AdminPremiumGroup.waiting_rank)
 async def adm_pg_rank(message: Message, state: FSMContext):
     if not await is_user_admin(message.from_user.id):
         return
-    if not message.text.strip().isdigit():
-        await message.answer("❌ Faqat raqam yuboring.")
-        return
-
     data = await state.get_data()
     country = data.get("pg_country", "uz")
+    if not message.text.strip().isdigit():
+        await message.answer("❌ Faqat raqam yuboring.", reply_markup=back_admin_kb(f"pg_country:{country}"))
+        return
+
     await crud.create_premium_group(
         country_code=country,
         name=data["name"],

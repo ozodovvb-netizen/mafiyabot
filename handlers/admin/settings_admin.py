@@ -20,10 +20,11 @@ router = Router(name="settings_admin")
 
 # --- Mukofot sozlamalari ---
 @router.callback_query(F.data == "adm:rewards")
-async def adm_rewards_show(callback: CallbackQuery):
+async def adm_rewards_show(callback: CallbackQuery, state: FSMContext):
     if not await is_user_admin(callback.from_user.id):
         await callback.answer()
         return
+    await state.clear()
     r = await crud.get_reward_settings()
     text = (
         "🏆 <b>Mukofot sozlamalari</b>\n\n"
@@ -55,11 +56,11 @@ async def adm_rewards_winner_money(message: Message, state: FSMContext):
     if not await is_user_admin(message.from_user.id):
         return
     if not message.text.strip().isdigit():
-        await message.answer("❌ Faqat raqam yuboring.")
+        await message.answer("❌ Faqat raqam yuboring.", reply_markup=back_admin_kb("adm:rewards"))
         return
     await state.update_data(winner_money=int(message.text.strip()))
     await state.set_state(AdminRewardSettings.waiting_winner_diamond)
-    await message.answer("🥇 G'olibga necha Olmos berilsin?")
+    await message.answer("🥇 G'olibga necha Olmos berilsin?", reply_markup=back_admin_kb("adm:rewards"))
 
 
 @router.message(AdminRewardSettings.waiting_winner_diamond)
@@ -67,11 +68,11 @@ async def adm_rewards_winner_diamond(message: Message, state: FSMContext):
     if not await is_user_admin(message.from_user.id):
         return
     if not message.text.strip().isdigit():
-        await message.answer("❌ Faqat raqam yuboring.")
+        await message.answer("❌ Faqat raqam yuboring.", reply_markup=back_admin_kb("adm:rewards"))
         return
     await state.update_data(winner_diamond=int(message.text.strip()))
     await state.set_state(AdminRewardSettings.waiting_loser_money)
-    await message.answer("🥈 Yutqazganga necha Dollar berilsin?")
+    await message.answer("🥈 Yutqazganga necha Dollar berilsin?", reply_markup=back_admin_kb("adm:rewards"))
 
 
 @router.message(AdminRewardSettings.waiting_loser_money)
@@ -79,11 +80,11 @@ async def adm_rewards_loser_money(message: Message, state: FSMContext):
     if not await is_user_admin(message.from_user.id):
         return
     if not message.text.strip().isdigit():
-        await message.answer("❌ Faqat raqam yuboring.")
+        await message.answer("❌ Faqat raqam yuboring.", reply_markup=back_admin_kb("adm:rewards"))
         return
     await state.update_data(loser_money=int(message.text.strip()))
     await state.set_state(AdminRewardSettings.waiting_loser_diamond)
-    await message.answer("🥈 Yutqazganga necha Olmos berilsin?")
+    await message.answer("🥈 Yutqazganga necha Olmos berilsin?", reply_markup=back_admin_kb("adm:rewards"))
 
 
 @router.message(AdminRewardSettings.waiting_loser_diamond)
@@ -91,7 +92,7 @@ async def adm_rewards_loser_diamond(message: Message, state: FSMContext):
     if not await is_user_admin(message.from_user.id):
         return
     if not message.text.strip().isdigit():
-        await message.answer("❌ Faqat raqam yuboring.")
+        await message.answer("❌ Faqat raqam yuboring.", reply_markup=back_admin_kb("adm:rewards"))
         return
     data = await state.get_data()
     await crud.update_reward_settings(
@@ -154,10 +155,11 @@ async def adm_card_save(message: Message, state: FSMContext):
 
 # --- Adminlar ro'yxati ---
 @router.callback_query(F.data == "adm:admins")
-async def adm_admins_list(callback: CallbackQuery):
+async def adm_admins_list(callback: CallbackQuery, state: FSMContext):
     if callback.from_user.id not in SUPER_ADMINS:
         await callback.answer("❌ Faqat bosh admin buni ko'ra oladi.", show_alert=True)
         return
+    await state.clear()
 
     from database.db import async_session
     from sqlalchemy import select
@@ -181,14 +183,14 @@ async def adm_admins_list(callback: CallbackQuery):
 
 
 @router.callback_query(F.data.startswith("adm_admin:del:"))
-async def adm_admin_delete(callback: CallbackQuery):
+async def adm_admin_delete(callback: CallbackQuery, state: FSMContext):
     if callback.from_user.id not in SUPER_ADMINS:
         await callback.answer()
         return
     admin_id = int(callback.data.split(":")[-1])
     await crud.remove_admin(admin_id)
     await callback.answer("🗑 Admin olib tashlandi")
-    await adm_admins_list(callback)
+    await adm_admins_list(callback, state)
 
 
 @router.callback_query(F.data == "adm_admin:add")
@@ -208,7 +210,7 @@ async def adm_admin_add_save(message: Message, state: FSMContext):
     if message.from_user.id not in SUPER_ADMINS:
         return
     if not message.text.strip().isdigit():
-        await message.answer("❌ Faqat raqam (ID) yuboring.")
+        await message.answer("❌ Faqat raqam (ID) yuboring.", reply_markup=back_admin_kb())
         return
     await crud.add_admin(int(message.text.strip()), added_by=message.from_user.id)
     await state.clear()

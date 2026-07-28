@@ -22,10 +22,11 @@ PROTECTION_EMOJI = {
 
 
 @router.callback_query(F.data == "adm:shop")
-async def adm_shop_list(callback: CallbackQuery):
+async def adm_shop_list(callback: CallbackQuery, state: FSMContext):
     if not await is_user_admin(callback.from_user.id):
         await callback.answer()
         return
+    await state.clear()
     items = await crud.get_shop_items(active_only=False)
     text = "🛒 <b>Do'kon buyumlari</b>\n\nO'chirish uchun bosing, yangi qo'shish uchun pastdagi tugma:"
     await callback.message.edit_text(text, reply_markup=list_with_delete_kb(items, "adm_shop"))
@@ -72,7 +73,8 @@ async def adm_shop_protection_type(callback: CallbackQuery, state: FSMContext):
     await state.update_data(protection_type=p_type)
     await state.set_state(AdminShopItem.waiting_description)
     await callback.message.edit_text(
-        "✍️ Bu buyum haqida tavsif yozing (foydalanuvchi ko'radigan matn - nimadan himoya qilishi):"
+        "✍️ Bu buyum haqida tavsif yozing (foydalanuvchi ko'radigan matn - nimadan himoya qilishi):",
+        reply_markup=back_admin_kb("adm:shop"),
     )
     await callback.answer()
 
@@ -83,7 +85,10 @@ async def adm_shop_description(message: Message, state: FSMContext):
         return
     await state.update_data(description=message.text.strip())
     await state.set_state(AdminShopItem.waiting_price_money)
-    await message.answer("💵 Narxini Dollarda kiriting (agar Olmosda sotilsa 0 yozing):")
+    await message.answer(
+        "💵 Narxini Dollarda kiriting (agar Olmosda sotilsa 0 yozing):",
+        reply_markup=back_admin_kb("adm:shop"),
+    )
 
 
 @router.message(AdminShopItem.waiting_price_money)
@@ -91,11 +96,14 @@ async def adm_shop_price_money(message: Message, state: FSMContext):
     if not await is_user_admin(message.from_user.id):
         return
     if not message.text.strip().isdigit():
-        await message.answer("❌ Faqat raqam yuboring.")
+        await message.answer("❌ Faqat raqam yuboring.", reply_markup=back_admin_kb("adm:shop"))
         return
     await state.update_data(price_money=int(message.text.strip()))
     await state.set_state(AdminShopItem.waiting_price_diamond)
-    await message.answer("💎 Narxini Olmosda kiriting (agar Dollarda sotilsa 0 yozing):")
+    await message.answer(
+        "💎 Narxini Olmosda kiriting (agar Dollarda sotilsa 0 yozing):",
+        reply_markup=back_admin_kb("adm:shop"),
+    )
 
 
 @router.message(AdminShopItem.waiting_price_diamond)
@@ -103,14 +111,15 @@ async def adm_shop_price_diamond(message: Message, state: FSMContext):
     if not await is_user_admin(message.from_user.id):
         return
     if not message.text.strip().isdigit():
-        await message.answer("❌ Faqat raqam yuboring.")
+        await message.answer("❌ Faqat raqam yuboring.", reply_markup=back_admin_kb("adm:shop"))
         return
     await state.update_data(price_diamond=int(message.text.strip()))
     await state.set_state(AdminShopItem.waiting_category)
     await message.answer(
         "📂 Bu buyum qaysi Xarid qilish tugmasida ko'rinsin?\n"
         "Qo'shtirnoqsiz shundan birini yozing: himoya | qurol | umumiy\n"
-        "(umumiy — faqat Do'kon bo'limida ko'rinadi):"
+        "(umumiy — faqat Do'kon bo'limida ko'rinadi):",
+        reply_markup=back_admin_kb("adm:shop"),
     )
 
 
@@ -120,7 +129,10 @@ async def adm_shop_category(message: Message, state: FSMContext):
         return
     category = message.text.strip().lower().strip("'\"“”‘’")
     if category not in ("himoya", "qurol", "umumiy"):
-        await message.answer("❌ Faqat himoya, qurol yoki umumiy deb yozing (qo'shtirnoqsiz).")
+        await message.answer(
+            "❌ Faqat himoya, qurol yoki umumiy deb yozing (qo'shtirnoqsiz).",
+            reply_markup=back_admin_kb("adm:shop"),
+        )
         return
 
     data = await state.get_data()
@@ -139,7 +151,10 @@ async def adm_shop_category(message: Message, state: FSMContext):
     except Exception:
         logger.exception("Do'kon buyumini qo'shishda xatolik")
         await state.clear()
-        await message.answer("❌ Buyumni qo'shishda xatolik yuz berdi. Qaytadan urinib ko'ring: /admin")
+        await message.answer(
+            "❌ Buyumni qo'shishda xatolik yuz berdi. Qaytadan urinib ko'ring: /admin",
+            reply_markup=back_admin_kb("adm:shop"),
+        )
         return
 
     await state.clear()

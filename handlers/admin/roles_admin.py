@@ -17,10 +17,11 @@ router = Router(name="roles_admin")
 
 
 @router.callback_query(F.data == "adm:roles")
-async def adm_roles_list(callback: CallbackQuery):
+async def adm_roles_list(callback: CallbackQuery, state: FSMContext):
     if not await is_user_admin(callback.from_user.id):
         await callback.answer()
         return
+    await state.clear()
     roles = await crud.get_roles(active_only=False)
     await callback.message.edit_text(
         "🎭 <b>Rollar</b>\n\nTahrirlash/o'chirish uchun bosing, yangi qo'shish uchun pastdagi tugma:",
@@ -146,14 +147,14 @@ async def adm_role_edit_max_save(message: Message, state: FSMContext):
     if not await is_user_admin(message.from_user.id):
         await state.clear()
         return
-    if not message.text.strip().isdigit():
-        await message.answer("❌ Faqat raqam yuboring.")
-        return
     data = await state.get_data()
+    if not message.text.strip().isdigit():
+        await message.answer("❌ Faqat raqam yuboring.", reply_markup=back_admin_kb(f"adm_role:view:{data.get('role_id', '')}"))
+        return
     role = await crud.update_role(data["role_id"], max_per_game=int(message.text.strip()))
     await state.clear()
     if not role:
-        await message.answer("❌ Bu rol allaqachon o'chirilgan.")
+        await message.answer("❌ Bu rol allaqachon o'chirilgan.", reply_markup=back_admin_kb("adm:roles"))
         return
     await message.answer(
         f"{role.emoji} <b>{role.name}</b>\n\n{role.description}\n\n"
@@ -182,14 +183,14 @@ async def adm_role_edit_price_save(message: Message, state: FSMContext):
     if not await is_user_admin(message.from_user.id):
         await state.clear()
         return
-    if not message.text.strip().isdigit():
-        await message.answer("❌ Faqat raqam yuboring (0 = sotilmaydi).")
-        return
     data = await state.get_data()
+    if not message.text.strip().isdigit():
+        await message.answer("❌ Faqat raqam yuboring (0 = sotilmaydi).", reply_markup=back_admin_kb(f"adm_role:view:{data.get('role_id', '')}"))
+        return
     role = await crud.update_role(data["role_id"], price_diamond=int(message.text.strip()))
     await state.clear()
     if not role:
-        await message.answer("❌ Bu rol allaqachon o'chirilgan.")
+        await message.answer("❌ Bu rol allaqachon o'chirilgan.", reply_markup=back_admin_kb("adm:roles"))
         return
     await message.answer(
         f"{role.emoji} <b>{role.name}</b>\n\n{role.description}\n\n"
@@ -219,14 +220,14 @@ async def adm_role_edit_vote_weight_save(message: Message, state: FSMContext):
     if not await is_user_admin(message.from_user.id):
         await state.clear()
         return
-    if not message.text.strip().isdigit() or int(message.text.strip()) < 1:
-        await message.answer("❌ Faqat 1 yoki undan katta raqam yuboring.")
-        return
     data = await state.get_data()
+    if not message.text.strip().isdigit() or int(message.text.strip()) < 1:
+        await message.answer("❌ Faqat 1 yoki undan katta raqam yuboring.", reply_markup=back_admin_kb(f"adm_role:view:{data.get('role_id', '')}"))
+        return
     role = await crud.update_role(data["role_id"], day_vote_weight=int(message.text.strip()))
     await state.clear()
     if not role:
-        await message.answer("❌ Bu rol allaqachon o'chirilgan.")
+        await message.answer("❌ Bu rol allaqachon o'chirilgan.", reply_markup=back_admin_kb("adm:roles"))
         return
     await message.answer(
         f"{role.emoji} <b>{role.name}</b>\n\n{role.description}\n\n"
@@ -287,10 +288,10 @@ async def adm_role_edit_money_amount_save(message: Message, state: FSMContext):
     if not await is_user_admin(message.from_user.id):
         await state.clear()
         return
-    if not message.text.strip().isdigit() or int(message.text.strip()) <= 0:
-        await message.answer("❌ Faqat 0 dan katta raqam yuboring.")
-        return
     data = await state.get_data()
+    if not message.text.strip().isdigit() or int(message.text.strip()) <= 0:
+        await message.answer("❌ Faqat 0 dan katta raqam yuboring.", reply_markup=back_admin_kb(f"adm_role:view:{data.get('role_id', '')}"))
+        return
     phase = data["phase"]
     role = await crud.update_role(
         data["role_id"],
@@ -298,7 +299,7 @@ async def adm_role_edit_money_amount_save(message: Message, state: FSMContext):
     )
     await state.clear()
     if not role:
-        await message.answer("❌ Bu rol allaqachon o'chirilgan.")
+        await message.answer("❌ Bu rol allaqachon o'chirilgan.", reply_markup=back_admin_kb("adm:roles"))
         return
     await message.answer(
         f"{role.emoji} <b>{role.name}</b>\n\n{role.description}\n\n"
@@ -350,7 +351,7 @@ async def adm_role_edit_mode_save(callback: CallbackQuery, state: FSMContext):
     role = await crud.update_role(role_id, mode=mode)
     await state.clear()
     if not role:
-        await callback.message.edit_text("❌ Bu rol allaqachon o'chirilgan.")
+        await callback.message.edit_text("❌ Bu rol allaqachon o'chirilgan.", reply_markup=back_admin_kb("adm:roles"))
         await callback.answer()
         return
     await callback.message.edit_text(
@@ -385,7 +386,7 @@ async def adm_role_edit_desc_save(message: Message, state: FSMContext):
     role = await crud.update_role(data["role_id"], description=message.text.strip())
     await state.clear()
     if not role:
-        await message.answer("❌ Bu rol allaqachon o'chirilgan.")
+        await message.answer("❌ Bu rol allaqachon o'chirilgan.", reply_markup=back_admin_kb("adm:roles"))
         return
     await message.answer(
         f"{role.emoji} <b>{role.name}</b>\n\n{role.description}\n\n"
@@ -522,7 +523,8 @@ async def adm_role_mode(callback: CallbackQuery, state: FSMContext):
     await state.set_state(AdminRole.waiting_description)
     await callback.message.edit_text(
         "✍️ Rol tavsifini yozing (bu matn foydalanuvchi /roles bosganda ko'radigan tavsif bo'ladi - "
-        "'bu rol nima qila oladi'):"
+        "'bu rol nima qila oladi'):",
+        reply_markup=back_admin_kb("adm:roles"),
     )
     await callback.answer()
 
@@ -534,7 +536,10 @@ async def adm_role_description(message: Message, state: FSMContext):
         return
     await state.update_data(description=message.text.strip())
     await state.set_state(AdminRole.waiting_max_per_game)
-    await message.answer("🔢 Bitta o'yinda bu roldan nechta bo'lishi mumkin? (masalan: 1):")
+    await message.answer(
+        "🔢 Bitta o'yinda bu roldan nechta bo'lishi mumkin? (masalan: 1):",
+        reply_markup=back_admin_kb("adm:roles"),
+    )
 
 
 @router.message(AdminRole.waiting_max_per_game)
@@ -543,7 +548,7 @@ async def adm_role_max(message: Message, state: FSMContext):
         await state.clear()
         return
     if not message.text.strip().isdigit():
-        await message.answer("❌ Faqat raqam yuboring.")
+        await message.answer("❌ Faqat raqam yuboring.", reply_markup=back_admin_kb("adm:roles"))
         return
     await state.update_data(max_per_game=int(message.text.strip()))
     await state.set_state(AdminRole.waiting_is_boss)
@@ -552,7 +557,8 @@ async def adm_role_max(message: Message, state: FSMContext):
     builder = InlineKeyboardBuilder()
     builder.button(text="✅ Ha", callback_data="role_boss:1")
     builder.button(text="❌ Yo'q", callback_data="role_boss:0")
-    builder.adjust(2)
+    builder.button(text="↩️ Bekor qilish", callback_data="adm:roles")
+    builder.adjust(2, 1)
     await message.answer(
         "👑 Bu rol o'z JAMOASI uchun \"boshliq\"mi? (Masalan Don - mafiyalar turlicha "
         "nishon tansa ham, OXIRGI qaror shu rolga tegishli bo'ladi):",
@@ -573,7 +579,8 @@ async def adm_role_boss(callback: CallbackQuery, state: FSMContext):
     builder = InlineKeyboardBuilder()
     builder.button(text="✅ Ha", callback_data="role_indep:1")
     builder.button(text="❌ Yo'q", callback_data="role_indep:0")
-    builder.adjust(2)
+    builder.button(text="↩️ Bekor qilish", callback_data="adm:roles")
+    builder.adjust(2, 1)
     await callback.message.edit_text(
         "🗡 Bu rol o'z nishonini MUSTAQIL tanlab, o'ldiradimi? (Masalan Qotil - mafiya "
         "jamoasida hisoblansa ham, boshliq/Don qaroriga bog'liq emas, o'zi tanlagan "
@@ -596,7 +603,8 @@ async def adm_role_independent(callback: CallbackQuery, state: FSMContext):
     builder = InlineKeyboardBuilder()
     builder.button(text="✅ Ha", callback_data="role_dual:1")
     builder.button(text="❌ Yo'q", callback_data="role_dual:0")
-    builder.adjust(2)
+    builder.button(text="↩️ Bekor qilish", callback_data="adm:roles")
+    builder.adjust(2, 1)
     await callback.message.edit_text(
         "🔀 Bu rol har kecha \"Tekshirish\" yoki \"Otish\" dan birini o'zi tanlab harakat "
         "qiladimi? (Masalan Komissar - xohlasa tekshiradi, xohlasa o'ldiradi):",
@@ -620,6 +628,7 @@ async def adm_role_dual(callback: CallbackQuery, state: FSMContext):
     builder.button(text="➖ Hech kimning o'rnini bosmaydi", callback_data="role_succ:0")
     for r in roles:
         builder.button(text=f"{r.emoji} {r.name}", callback_data=f"role_succ:{r.id}")
+    builder.button(text="↩️ Bekor qilish", callback_data="adm:roles")
     builder.adjust(1)
     await callback.message.edit_text(
         "🔁 Bu rol egasi tirik bo'lib, quyidagi rollardan biri o'lsa, uning o'rnini "
@@ -654,7 +663,7 @@ async def adm_role_vote_weight(message: Message, state: FSMContext):
         await state.clear()
         return
     if not message.text.strip().isdigit() or int(message.text.strip()) < 1:
-        await message.answer("❌ Faqat 1 yoki undan katta raqam yuboring.")
+        await message.answer("❌ Faqat 1 yoki undan katta raqam yuboring.", reply_markup=back_admin_kb("adm:roles"))
         return
     await state.update_data(day_vote_weight=int(message.text.strip()))
     await state.set_state(AdminRole.waiting_night_money_target)
@@ -663,6 +672,7 @@ async def adm_role_vote_weight(message: Message, state: FSMContext):
     builder.button(text="➖ Effekt yo'q", callback_data="role_new_money:night:none")
     builder.button(text="🙋 O'ziga (pul ishlab topadi)", callback_data="role_new_money:night:self")
     builder.button(text="👥 Hammaga (pul tarqatadi)", callback_data="role_new_money:night:all")
+    builder.button(text="↩️ Bekor qilish", callback_data="adm:roles")
     builder.adjust(1)
     await message.answer(
         "🌙💰 Bu rol TUN tugagach avtomatik pul effektiga egami?", reply_markup=builder.as_markup()
@@ -683,7 +693,10 @@ async def adm_role_night_money_target(callback: CallbackQuery, state: FSMContext
         await state.update_data(night_money_target=target)
         await state.set_state(AdminRole.waiting_night_money_amount)
         who = "o'ziga" if target == "self" else "HAR BIR tirik o'yinchiga"
-        await callback.message.edit_text(f"💵 Har tundan keyin {who} necha dollar berilsin? (masalan: 50):")
+        await callback.message.edit_text(
+            f"💵 Har tundan keyin {who} necha dollar berilsin? (masalan: 50):",
+            reply_markup=back_admin_kb("adm:roles"),
+        )
     await callback.answer()
 
 
@@ -693,7 +706,7 @@ async def adm_role_night_money_amount(message: Message, state: FSMContext):
         await state.clear()
         return
     if not message.text.strip().isdigit() or int(message.text.strip()) <= 0:
-        await message.answer("❌ Faqat 0 dan katta raqam yuboring.")
+        await message.answer("❌ Faqat 0 dan katta raqam yuboring.", reply_markup=back_admin_kb("adm:roles"))
         return
     await state.update_data(night_money_amount=int(message.text.strip()))
     await _adm_role_ask_day_money(message, state)
@@ -706,6 +719,7 @@ async def _adm_role_ask_day_money(message: Message, state: FSMContext):
     builder.button(text="➖ Effekt yo'q", callback_data="role_new_money:day:none")
     builder.button(text="🙋 O'ziga (pul ishlab topadi)", callback_data="role_new_money:day:self")
     builder.button(text="👥 Hammaga (pul tarqatadi)", callback_data="role_new_money:day:all")
+    builder.button(text="↩️ Bekor qilish", callback_data="adm:roles")
     builder.adjust(1)
     await message.answer(
         "☀️💰 Bu rol KUN boshlanganda avtomatik pul effektiga egami?", reply_markup=builder.as_markup()
@@ -732,7 +746,10 @@ async def adm_role_day_money_target(callback: CallbackQuery, state: FSMContext):
         await state.update_data(day_money_target=target)
         await state.set_state(AdminRole.waiting_day_money_amount)
         who = "o'ziga" if target == "self" else "HAR BIR tirik o'yinchiga"
-        await callback.message.edit_text(f"💵 Har kun boshida {who} necha dollar berilsin? (masalan: 50):")
+        await callback.message.edit_text(
+            f"💵 Har kun boshida {who} necha dollar berilsin? (masalan: 50):",
+            reply_markup=back_admin_kb("adm:roles"),
+        )
     await callback.answer()
 
 
@@ -742,7 +759,7 @@ async def adm_role_day_money_amount(message: Message, state: FSMContext):
         await state.clear()
         return
     if not message.text.strip().isdigit() or int(message.text.strip()) <= 0:
-        await message.answer("❌ Faqat 0 dan katta raqam yuboring.")
+        await message.answer("❌ Faqat 0 dan katta raqam yuboring.", reply_markup=back_admin_kb("adm:roles"))
         return
     await state.update_data(day_money_amount=int(message.text.strip()))
     await state.set_state(AdminRole.waiting_price)
@@ -760,7 +777,7 @@ async def adm_role_price(message: Message, state: FSMContext):
         await state.clear()
         return
     if not message.text.strip().isdigit():
-        await message.answer("❌ Faqat raqam yuboring (0 = sotilmaydi).")
+        await message.answer("❌ Faqat raqam yuboring (0 = sotilmaydi).", reply_markup=back_admin_kb("adm:roles"))
         return
     data = await state.get_data()
     role_name = data["name"]

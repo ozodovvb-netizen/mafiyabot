@@ -12,10 +12,11 @@ router = Router(name="heroes_admin")
 
 
 @router.callback_query(F.data == "adm:heroes")
-async def adm_heroes_list(callback: CallbackQuery):
+async def adm_heroes_list(callback: CallbackQuery, state: FSMContext):
     if not await is_user_admin(callback.from_user.id):
         await callback.answer()
         return
+    await state.clear()
     heroes = await crud.get_heroes(active_only=False)
     await callback.message.edit_text(
         "🦸 <b>Geroylar</b>\n\nO'chirish uchun bosing, yangi qo'shish uchun pastdagi tugma:",
@@ -55,7 +56,10 @@ async def adm_hero_name(message: Message, state: FSMContext):
         return
     await state.update_data(name=message.text.strip())
     await state.set_state(AdminHero.waiting_abilities)
-    await message.answer("💪 Geroy o'yin davomida nimalar qila olishini yozing:")
+    await message.answer(
+        "💪 Geroy o'yin davomida nimalar qila olishini yozing:",
+        reply_markup=back_admin_kb("adm:heroes"),
+    )
 
 
 @router.message(AdminHero.waiting_abilities)
@@ -64,7 +68,10 @@ async def adm_hero_abilities(message: Message, state: FSMContext):
         return
     await state.update_data(abilities_text=message.text.strip())
     await state.set_state(AdminHero.waiting_protection_text)
-    await message.answer("🛡 Geroy nimalardan himoya qila olishini yozing:")
+    await message.answer(
+        "🛡 Geroy nimalardan himoya qila olishini yozing:",
+        reply_markup=back_admin_kb("adm:heroes"),
+    )
 
 
 @router.message(AdminHero.waiting_protection_text)
@@ -73,7 +80,10 @@ async def adm_hero_protection(message: Message, state: FSMContext):
         return
     await state.update_data(protection_text=message.text.strip())
     await state.set_state(AdminHero.waiting_price_diamond)
-    await message.answer("💎 Narxini Olmosda kiriting:")
+    await message.answer(
+        "💎 Narxini Olmosda kiriting:",
+        reply_markup=back_admin_kb("adm:heroes"),
+    )
 
 
 @router.message(AdminHero.waiting_price_diamond)
@@ -81,11 +91,14 @@ async def adm_hero_price_diamond(message: Message, state: FSMContext):
     if not await is_user_admin(message.from_user.id):
         return
     if not message.text.strip().isdigit():
-        await message.answer("❌ Faqat raqam yuboring.")
+        await message.answer("❌ Faqat raqam yuboring.", reply_markup=back_admin_kb("adm:heroes"))
         return
     await state.update_data(price_diamond=int(message.text.strip()))
     await state.set_state(AdminHero.waiting_price_stars)
-    await message.answer("⭐ Narxini Telegram Stars da kiriting:")
+    await message.answer(
+        "⭐ Narxini Telegram Stars da kiriting:",
+        reply_markup=back_admin_kb("adm:heroes"),
+    )
 
 
 @router.message(AdminHero.waiting_price_stars)
@@ -93,7 +106,7 @@ async def adm_hero_price_stars(message: Message, state: FSMContext):
     if not await is_user_admin(message.from_user.id):
         return
     if not message.text.strip().isdigit():
-        await message.answer("❌ Faqat raqam yuboring.")
+        await message.answer("❌ Faqat raqam yuboring.", reply_markup=back_admin_kb("adm:heroes"))
         return
     data = await state.get_data()
     await crud.create_hero(
