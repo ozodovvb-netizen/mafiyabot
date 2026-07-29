@@ -76,20 +76,30 @@ async def _render_mode_roles(callback: CallbackQuery, idx: int):
     assignable_roles = [r for r in all_roles if r.id not in in_mode_ids]
 
     roles_text = (
-        "\n".join(f"• {r.emoji} {r.name} — {r.max_per_game} dona" for r in roles_in_mode)
+        "\n".join(
+            f"• {r.emoji} {r.name} — {r.max_per_game} dona" + ("" if r.is_active else " (🚫 nofaol)")
+            for r in roles_in_mode
+        )
         if roles_in_mode else "— hozircha bu rejimga hech qanday rol biriktirilmagan —"
     )
     await callback.message.edit_text(
         f"🎲 <b>{mode_name}</b> rejimiga tegishli rollar:\n\n{roles_text}\n\n"
         "Rolni bosib uning sonini yoki boshqa sozlamalarini o'zgartirishingiz mumkin. "
-        "Boshqa rejimdagi rolni shu rejimga qo'shish uchun pastdagi \"➕\" tugmalaridan foydalaning "
-        "(rol faqat BITTA rejimga tegishli bo'ladi, qo'shilganda eski rejimidan chiqadi):",
+        "\"🚫\" tugmasi rolni BUTUNLAY o'chirmaydi, faqat shu rejimdan chiqaradi (agar rol "
+        "boshqa rejim(lar)da ham bo'lsa, o'shalarda FAOL bo'lib qolaveradi; agar bu uning "
+        "yagona rejimi bo'lsa, rol butunlay nofaol bo'ladi va \"Holati\" tugmasi orqali "
+        "qayta faollashtirish mumkin). "
+        "Boshqa rejimdagi rolni shu rejimga QO'SHISH uchun pastdagi \"➕\" tugmalaridan "
+        "foydalaning (rol eski rejim(lar)idan chiqmaydi, bir vaqtda bir nechta rejimga "
+        "tegishli bo'lishi mumkin):",
         reply_markup=mode_roles_view_kb(idx, roles_in_mode, assignable_roles),
     )
 
 
 @router.callback_query(F.data.startswith("adm_mode:assign:"))
 async def adm_mode_assign_role(callback: CallbackQuery):
+    """Rolni ESKI rejim(lar)idan chiqarmasdan, shu rejimga QO'SHIMCHA sifatida
+    qo'shadi -- shu bilan bitta rol bir nechta rejimda ishlatilishi mumkin bo'ladi."""
     if not await is_user_admin(callback.from_user.id):
         await callback.answer()
         return
@@ -112,24 +122,39 @@ async def adm_mode_assign_role(callback: CallbackQuery):
         )
         return
 
-    await crud.update_role(role_id, mode=mode_name)
+    await crud.add_role_to_mode(role_id, mode_name)
     await _render_mode_roles(callback, idx)
-    await callback.answer(f"✅ {role.name} endi \"{mode_name}\" rejimiga tegishli.")
+    await callback.answer(f"✅ {role.name} endi \"{mode_name}\" rejimida ham ishlatiladi.")
 
 
 @router.callback_query(F.data.startswith("adm_mode:role_del:"))
 async def adm_mode_role_delete(callback: CallbackQuery):
-    """Rejim ichidan, to'liq rol tahririga kirmasdan, rolni butunlay o'chiradi."""
+    """Rejim ichidan, to'liq rol tahririga kirmasdan, rolni FAQAT shu rejimdan
+    chiqaradi. Agar rol boshqa rejim(lar)da ham bo'lsa, o'shalarda FAOL bo'lib
+    qolaveradi -- butun rol o'chirilmaydi/nofaollashtirilmaydi. Faqat rolning
+    YAGONA rejimi shu bo'lsa, boshqa iloji qolmagani uchun rol nofaol qilinadi."""
     if not await is_user_admin(callback.from_user.id):
         await callback.answer()
         return
     _, _, idx_s, role_id_s = callback.data.split(":")
     idx, role_id = int(idx_s), int(role_id_s)
+    names = await crud.get_mode_names(active_only=False)
+    if not (0 <= idx < len(names)):
+        await callback.answer("❌ Bu rejim topilmadi.", show_alert=True)
+        return
+    mode_name = names[idx]
+
     role = await crud.get_role(role_id)
     role_name = role.name if role else "Rol"
-    await crud.delete_role(role_id)
+    result = await crud.unlink_role_from_mode(role_id, mode_name)
     await _render_mode_roles(callback, idx)
-    await callback.answer(f"🗑 {role_name} o'chirildi")
+
+    if result == "unlinked" or result == "promoted":
+        await callback.answer(f"🚫 {role_name} \"{mode_name}\" rejimidan chiqarildi (boshqa rejimlarida FAOL).")
+    elif result == "deactivated":
+        await callback.answer(f"🚫 {role_name} nofaollashtirildi (bu uning yagona rejimi edi).")
+    else:
+        await callback.answer("❌ Bu rol topilmadi.", show_alert=True)
 
 
 @router.callback_query(F.data.startswith("adm_mode:role_move:"))
@@ -182,6 +207,7 @@ async def adm_mode_role_move_save(callback: CallbackQuery):
         return
 
     await crud.update_role(role_id, mode=new_mode_name)
+    await crud.remove_extra_mode_link(role_id, new_mode_name)
     await _render_mode_roles(callback, new_idx)
     await callback.answer(f"✅ {role.name} \"{new_mode_name}\" rejimiga o'tkazildi.")
 

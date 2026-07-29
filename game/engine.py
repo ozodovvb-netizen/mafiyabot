@@ -69,6 +69,10 @@ class GameEngine:
         self.nominations: dict[int, int] = {}  # voter_id -> nominee_id
         self.vote_message_id: int | None = None
         self.phase: str = "registration"  # registration | night | day | finished
+        self.lynched_jester_ids: set[int] = set()
+        # "wins_when_lynched" (masalan Masxaraboz/Jester) turidagi rol egalari, agar
+        # KUNDUZI ovoz berish orqali OSILSA, shu yerga qo'shiladi -- finish_game() da
+        # ular jamoa/tirik qolish holatidan qat'i nazar G'OLIB deb hisoblanadi.
 
     # -------------------------------------------------------------------
     # RO'YXATDAN O'TISH
@@ -403,6 +407,9 @@ class GameEngine:
         NightActionType.protect: [
             "🛡 {role} qo'riqlash uchun joy oldi...",
         ],
+        NightActionType.mine: [
+            "🧨 {role} birovning uyi yaqiniga mina qo'ymoqda...",
+        ],
         NightActionType.check: [
             "🔍 {role} birovni tekshirmoqda...",
             "🔍 {role} shubhalilarni kuzatmoqda...",
@@ -546,9 +553,10 @@ class GameEngine:
         heal_targets: set[int] = set()
         heal_entries: list[tuple[int, int]] = []  # (doctor_id, target_id)
         checked_info: list[tuple[int, int]] = []  # (checker_id, target_id)
-        kill_entries: list[tuple[int, int, str]] = []  # (actor_id, target_id, team)
+        kill_entries: list[tuple[int, int, str, bool]] = []  # (actor_id, target_id, team, acts_independently)
         block_entries: list[tuple[int, int]] = []  # (blocker_id, target_id)
         revive_entries: list[tuple[int, int]] = []  # (reviver_id, target_id)
+        mine_entries: list[tuple[int, int]] = []  # (minachi_id, target_id)
 
         for actor_id, target_id in self.night_actions.items():
             actor = self.players.get(actor_id)
@@ -567,6 +575,10 @@ class GameEngine:
                 block_entries.append((actor_id, target_id))
             elif action == NightActionType.revive:
                 revive_entries.append((actor_id, target_id))
+            elif action == NightActionType.mine:
+                mine_entries.append((actor_id, target_id))
+
+        mined_target_ids = {target_id for _actor_id, target_id in mine_entries}
 
         # Jamoa bo'lib harakat qiluvchilar uchun (masalan mafiyalar) - agar jamoada
         # "boshliq" (masalan Don) bo'lsa, OXIRGI qaror shunga tegishli bo'ladi; boshliq
@@ -616,6 +628,8 @@ class GameEngine:
 
         died = []
         killed_back_attackers = []
+        mine_killed_attackers = []
+        mine_triggered_ids: set[int] = set()
         for target_id in kill_targets:
             if target_id in heal_targets:
                 continue
@@ -658,8 +672,55 @@ class GameEngine:
                     pass
                 continue
 
+            # "Minachi" - agar bu odamning uyiga mina qo'yilgan bo'lsa, o'zi tegilmay
+            # qoladi, o'rniga HUJUMCHI mina portlashidan halok bo'ladi. Bu tekshiruv
+            # eng OXIRIDA turadi -- ya'ni faqat doktor davolamagan VA hech qanday
+            # do'kon himoyasi ishlamagan bo'lsagina ishga tushadi.
+            if target_id in mined_target_ids:
+                attacker_id = self._find_kill_attacker(target_id)
+                if attacker_id:
+                    attacker = self.players.get(attacker_id)
+                    if attacker and attacker.alive:
+                        attacker.alive = False
+                        mine_killed_attackers.append((target, attacker))
+                        mine_triggered_ids.add(target_id)
+                try:
+                    await self.bot.send_message(target_id, t("mine_saved_you", self.lang))
+                except Exception:
+                    pass
+                continue
+
             target.alive = False
             died.append(target)
+
+        # Mina qo'yuvchiga natija haqida xabar (portladimi yoki yo'qmi)
+        for minachi_id, target_id in mine_entries:
+            target = self.players.get(target_id)
+            if not target:
+                continue
+            try:
+                if target_id in mine_triggered_ids:
+                    await self.bot.send_message(
+                        minachi_id, t("mine_triggered_notice", self.lang, name=target.name)
+                    )
+                else:
+                    await self.bot.send_message(
+                        minachi_id, t("mine_no_trigger", self.lang, name=target.name)
+                    )
+            except Exception:
+                pass
+
+        for victim, attacker in mine_killed_attackers:
+            await self.bot.send_message(
+                self.chat_id,
+                t(
+                    "mine_killed_attacker", self.lang,
+                    victim=mention(victim.user_id, victim.name),
+                    attacker=mention(attacker.user_id, attacker.name),
+                    attacker_role=f"{attacker.role.emoji} {attacker.role.name}" if attacker.role else "",
+                ),
+            )
+            self._schedule_last_words(attacker, killed_at_night=True)
 
         for victim, attacker in killed_back_attackers:
             await self.bot.send_message(
@@ -830,8 +891,9 @@ class GameEngine:
         return None
 
     async def _build_night_deaths_text(self, died: list) -> str:
-        """Har bir tunda o'lgan o'yinchi uchun rol nomini va (agar bo'lsa) o'sha kecha unga
-        boshqa (o'ldiruvchi bo'lmagan) rol tashrif buyurganini oshkor qiladigan matn tuzadi."""
+        """Har bir tunda o'lgan o'yinchi uchun rol nomini va uni AYNAN KIM (qaysi rol)
+        o'ldirganini oshkor qiladigan matn tuzadi (masalan "Don" o'ldirsa - "Don keldi",
+        "Mafiya" o'ldirsa - "Mafiya keldi" deb yoziladi)."""
         from utils.helpers import mention
         lines = [t("night_deaths_title", self.lang)]
         for d in died:
@@ -839,20 +901,17 @@ class GameEngine:
             role_label = "" if masked else (f"{d.role.emoji} {d.role.name}" if d.role else "")
             line = t("night_death_line", self.lang, role=role_label, name=mention(d.user_id, d.name))
 
-            visitor_id = None
-            for actor_id, target_id in self.night_actions.items():
-                if target_id != d.user_id or actor_id == d.user_id:
-                    continue
-                actor = self.players.get(actor_id)
-                if not actor or not actor.role or actor.role.night_action_type == NightActionType.kill:
-                    continue
-                visitor_id = actor_id
-                break
+            # MUHIM: bu yerda oldin O'LDIRMAGAN (masalan doktor/komissar kabi) tasodifiy
+            # tashrif buyuruvchi ko'rsatilardi va aynan O'LDIRGAN rol atayin YASHIRILARDI.
+            # Endi (foydalanuvchi so'roviga ko'ra) aksincha - AYNAN o'ldirgan rol
+            # ko'rsatiladi (masalan Don o'ldirgan bo'lsa "Don", Mafiya o'ldirgan bo'lsa
+            # "Mafiya" kelgani yoziladi). Ism oshkor qilinmaydi, faqat rol nomi.
+            attacker_id = self._find_kill_attacker(d.user_id)
 
-            if visitor_id:
-                visitor = self.players[visitor_id]
-                visitor_label = f"{visitor.role.emoji} {visitor.role.name}" if visitor.role else "??"
-                line += " " + t("night_death_visitor", self.lang, visitor_role=visitor_label)
+            if attacker_id:
+                attacker = self.players.get(attacker_id)
+                attacker_label = f"{attacker.role.emoji} {attacker.role.name}" if attacker and attacker.role else "??"
+                line += " " + t("night_death_visitor", self.lang, visitor_role=attacker_label)
             lines.append(line)
         return "\n".join(lines)
 
@@ -950,6 +1009,8 @@ class GameEngine:
                 )
             else:
                 nominee.alive = False
+                if nominee.role and nominee.role.wins_when_lynched:
+                    self.lynched_jester_ids.add(nominee.user_id)
                 if await crud.consume_protection(nominee.user_id, ProtectionType.maska):
                     await self.bot.send_message(
                         self.chat_id,
@@ -1025,10 +1086,13 @@ class GameEngine:
             except Exception:
                 pass
 
+        go_to_bot_kb = InlineKeyboardBuilder()
+        go_to_bot_kb.button(text="🤖 Botga o'tish", url=f"https://t.me/{config.BOT_USERNAME}")
         await self.bot.send_message(
             self.chat_id,
             f"🗳 Ovoz berish boshlandi! Har bir o'yinchi botdagi shaxsiy xabarga javob bersin. "
             f"({VOTING_SECONDS} soniya)",
+            reply_markup=go_to_bot_kb.as_markup(),
         )
 
         await asyncio.sleep(VOTING_SECONDS)
@@ -1177,11 +1241,27 @@ class GameEngine:
         # "mafiya g'alaba qildimi/qilmadimi"ga qarab emas, balki O'ZINING oxirigacha
         # TIRIK QOLGAN-QOLMAGANIGA qarab g'olib/mag'lub bo'lishi kerak - mafiya yoki
         # tinch aholi g'alabasi Yakkaga umuman ALOQADOR EMAS.
+        #
+        # YANA BIR MUHIM TUZATISH: oldin jamoaviy (mafia/peaceful) g'alabada, o'sha
+        # jamoaning O'LGAN a'zolari ham (masalan tunda o'ldirilgan yoki kunduzi osilgan
+        # tinch aholi) "g'olib" deb hisoblanardi -- faqat jamoa nomi mos kelsa yetarli
+        # edi, o'yinchi TIRIKmi yoki YO'Qmi tekshirilmasdi. Shu sabab, masalan, o'yinning
+        # boshida o'ldirilgan tinch aholi, keyin Don AFK bo'lib o'yin tugaganda ham
+        # "g'olib" bo'lib chiqib, bekorga mukofot olardi. Endi HAR BIR o'yinchi (yakka
+        # yoki jamoaviy - farqi yo'q) FAQAT tirik qolgan bo'lsagina g'olib hisoblanadi.
+        #
+        # "wins_when_lynched" (masalan Masxaraboz/Jester) turidagi rol -- bularning
+        # g'alabasi jamoa yoki tirik qolish-qolmasligiga UMUMAN bog'liq emas: FAQAT
+        # kunduzi ovoz berish orqali OSILGAN bo'lsa g'olib, aks holda (hatto o'yin
+        # oxirigacha tirik qolsa ham) mag'lub hisoblanadi.
         winners = [
             p for p in self.players.values()
             if p.role and (
-                (p.role.team.value == "solo" and p.alive)
-                or (p.role.team.value != "solo" and p.role.team.value == winner_team)
+                (p.role.wins_when_lynched and p.user_id in self.lynched_jester_ids)
+                or (not p.role.wins_when_lynched and p.alive and (
+                    p.role.team.value == "solo"
+                    or p.role.team.value == winner_team
+                ))
             )
         ]
         others = [p for p in self.players.values() if p not in winners]

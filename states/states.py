@@ -43,6 +43,7 @@ class AdminRole(StatesGroup):
     waiting_is_boss = State()
     waiting_independent = State()
     waiting_dual_action = State()
+    waiting_wins_lynched = State()
     waiting_succeeds = State()
     waiting_vote_weight = State()
     waiting_night_money_target = State()

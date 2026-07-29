@@ -97,7 +97,7 @@ def role_team_select_kb() -> InlineKeyboardMarkup:
 ROLE_ACTION_LABELS = [
     ("none", "Yo'q"), ("kill", "O'ldirish"), ("heal", "Davolash"),
     ("check", "Tekshirish"), ("block", "Bloklash"), ("revive", "Tiriltirish"),
-    ("protect", "Himoya qilish"), ("custom", "Faqat matn (avtomatikasiz)"),
+    ("protect", "Himoya qilish"), ("mine", "🧨 Mina qo'yish"), ("custom", "Faqat matn (avtomatikasiz)"),
 ]
 ROLE_TEAM_LABELS = [("mafia", "🔪 Mafiya"), ("peaceful", "🕊 Tinch aholi"), ("solo", "🎯 Yakka")]
 
@@ -139,6 +139,10 @@ def role_view_kb(role) -> InlineKeyboardMarkup:
     builder.button(
         text=f"🔀 Tekshirish/Otish (dual): {'✅ Ha' if role.dual_check_or_kill else '❌ Yo\'q'}",
         callback_data=f"role_edit_toggle:{role.id}:dual_check_or_kill",
+    )
+    builder.button(
+        text=f"🃏 Faqat osilsa g'olib (Masxaraboz): {'✅ Ha' if role.wins_when_lynched else '❌ Yo\'q'}",
+        callback_data=f"role_edit_toggle:{role.id}:wins_when_lynched",
     )
     builder.button(text=f"🔢 Bittaga soni: {role.max_per_game}", callback_data=f"role_edit_max:{role.id}")
     builder.button(
@@ -229,7 +233,7 @@ def mode_roles_view_kb(mode_idx: int, roles_in_mode: list, assignable_roles: lis
             callback_data=f"adm_mode:role_move:{mode_idx}:{r.id}",
         )
         builder.button(
-            text=f"🗑 {r.name} ni o'chirish",
+            text=f"🚫 {r.name} ni nofaollashtirish",
             callback_data=f"adm_mode:role_del:{mode_idx}:{r.id}",
         )
     for r in assignable_roles:

@@ -39,6 +39,11 @@ class NightActionType(str, enum.Enum):
     block = "block"          # bloklash / uxlatish (Sehrgar)
     revive = "revive"        # tiriltirish
     protect = "protect"      # himoya qilish (Serjant/Bodyguard)
+    mine = "mine"            # mina qo'yish (Minachi): tunda TANLAGAN o'yinchining "uyiga"
+    # mina qo'yadi. Mina qo'yilgan odamning O'ZI hech narsa sezmaydi/o'lmaydi - lekin
+    # agar shu kecha kimdir (Mafiya/Don/Qotil va h.k.) aynan O'SHA odamni o'ldirishga
+    # harakat qilsa (va bu hujum doktor/himoya tomonidan to'xtatilmasa), HUJUMCHI o'zi
+    # halok bo'ladi, nishon esa tegilmay omon qoladi (game/engine.py -> _resolve_night_actions).
     custom = "custom"        # faqat matn - avtomatik mexanika yo'q, hikoya/rol-play uchun
 
 
@@ -215,6 +220,14 @@ class Role(Base):
     # 0 = do'kondan sotib olinmaydi. 0 dan katta bo'lsa - foydalanuvchi shuncha olmosga
     # ushbu rolni "band qilib" (reserve) qo'ya oladi va KEYINGI o'yinda shu rolda o'ynaydi.
 
+    wins_when_lynched: Mapped[bool] = mapped_column(Boolean, default=False)
+    # True bo'lsa (masalan "Masxaraboz"/Jester): bu rol tunda odatda hech narsa qila
+    # olmaydi (night_action_type=none qilib qo'yiladi), lekin g'alaba SHARTI boshqacha -
+    # jamoa yoki tirik qolish-qolmasligiga bog'liq EMAS. Aksincha: agar bu rol KUNDUZI
+    # OVOZ BERISH orqali OSILSA (lynch qilinsa) - o'sha o'yinchi G'OLIB hisoblanadi;
+    # aks holda (osilmasa - tunda o'lsa yoki o'yin oxirigacha tirik qolsa ham) MAG'LUB
+    # hisoblanadi. Bu odatiy jamoa/yakka g'alaba mantig'idan butunlay MUSTAQIL.
+
     # --- Admin o'zi sozlaydigan qo'shimcha KUNDUZGI/TUNGI effektlar ---
     # Bular tayyor "bloklar" - admin har bir rol uchun panelda raqam/tanlov orqali
     # o'zi belgilaydi, kodga qo'l tegmaydi. Shu bloklarni kombinatsiyalab istalgan
@@ -235,6 +248,23 @@ class Role(Base):
     # payt TIRIK bo'lgan HAMMA o'yinchiga amount qadar pul ulashiladi (masalan
     # "hammaga pul tarqatadigan" rol). night_* - tun tugaganda, day_* - kun
     # boshlanganda ishlaydi.
+
+
+# ---------------------------------------------------------------------------
+# ROLNING QO'SHIMCHA REJIMLARI (bitta rol bir nechta rejimga tegishli bo'lishi uchun)
+# ---------------------------------------------------------------------------
+class RoleGameMode(Base):
+    """Role.mode ustuni rolning ASOSIY rejimini bildiradi. Agar admin bitta rolni
+    yana boshqa rejim(lar)ga ham QO'SHSA (o'chirmasdan/ko'chirmasdan), shu yerga
+    qo'shimcha (role_id, mode) qatori yoziladi. Rol shu tarzda bir vaqtning
+    o'zida bir nechta rejimda ishlatilishi mumkin bo'ladi."""
+    __tablename__ = "role_game_modes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    role_id: Mapped[int] = mapped_column(ForeignKey("roles.id", ondelete="CASCADE"))
+    mode: Mapped[str] = mapped_column(String(32))
+
+    __table_args__ = (UniqueConstraint("role_id", "mode", name="uq_role_game_mode"),)
 
 
 # ---------------------------------------------------------------------------

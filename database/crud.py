@@ -13,6 +13,7 @@ from database.models import (
     DiamondPackage, DiamondTopupRequest, PartnerRequest, BotSetting,
     AdminUser, GameSession, GamePlayer, RewardSettings, GroupSetting, GameMode,
     GenderEnum, ProtectionType, DiamondRequestStatus, GameStatus, GroupMember,
+    RoleGameMode,
 )
 
 
@@ -327,10 +328,17 @@ async def get_roles(active_only: bool = True, mode: str | None = None) -> list[R
         if active_only:
             q = q.where(Role.is_active == True)  # noqa: E712
         if mode:
+            mode_key = mode.strip().lower()
             # func.lower() bilan solishtiramiz -- aks holda admin rol qo'shganda mode
             # matnini (masalan "Classic" o'rniga "classic") biroz boshqacha yozsa, bu rol
             # HECH QACHON o'yinga tanlanmay, sababsiz "hamma tinch aholi" bo'lib chiqishi mumkin.
-            q = q.where(func.lower(Role.mode) == mode.strip().lower())
+            # Rol o'zining ASOSIY rejimi (Role.mode) bilan MOS kelsa, YOKI shu rejimga
+            # QO'SHIMCHA sifatida bog'langan bo'lsa (role_game_modes) - ikkalasi ham hisobga olinadi,
+            # chunki endi bitta rol bir nechta rejimga tegishli bo'lishi mumkin.
+            extra_ids_q = select(RoleGameMode.role_id).where(func.lower(RoleGameMode.mode) == mode_key)
+            q = q.where(
+                (func.lower(Role.mode) == mode_key) | (Role.id.in_(extra_ids_q))
+            )
         res = await s.execute(q)
         return list(res.scalars().all())
 
@@ -415,10 +423,13 @@ async def get_reserved_roles(user_ids: list[int]) -> dict[int, Role]:
 async def role_name_exists_in_mode(name: str, mode: str, exclude_id: int | None = None) -> bool:
     """Xuddi shu rejimda (katta-kichik harfga qaramay) bir xil nomli faol rol
     borligini tekshiradi. Buni tekshirmasdan rol qo'shilsa, bitta o'yinda bir xil
-    rol 2 marta chiqib qolishi mumkin (masalan ikkita "Don")."""
+    rol 2 marta chiqib qolishi mumkin (masalan ikkita "Don"). Rol shu rejimga
+    ASOSIY yoki QO'SHIMCHA sifatida bog'langan bo'lishi ham hisobga olinadi."""
+    mode_key = mode.strip().lower()
     async with async_session() as s:
+        extra_ids_q = select(RoleGameMode.role_id).where(func.lower(RoleGameMode.mode) == mode_key)
         q = select(Role).where(
-            func.lower(Role.mode) == mode.strip().lower(),
+            (func.lower(Role.mode) == mode_key) | (Role.id.in_(extra_ids_q)),
             func.lower(Role.name) == name.strip().lower(),
             Role.is_active == True,  # noqa: E712
         )
@@ -426,6 +437,120 @@ async def role_name_exists_in_mode(name: str, mode: str, exclude_id: int | None 
             q = q.where(Role.id != exclude_id)
         res = await s.execute(q)
         return res.scalars().first() is not None
+
+
+async def get_role_extra_modes(role_id: int) -> list[str]:
+    """Rolga QO'SHIMCHA (asosiysidan tashqari) bog'langan rejimlar ro'yxati."""
+    async with async_session() as s:
+        res = await s.execute(select(RoleGameMode.mode).where(RoleGameMode.role_id == role_id))
+        return [row[0] for row in res.all()]
+
+
+async def get_role_all_modes(role_id: int) -> list[str]:
+    """Rol tegishli bo'lgan BARCHA rejimlar (asosiy + qo'shimcha), dublikatsiz."""
+    role = await get_role(role_id)
+    if not role:
+        return []
+    extras = await get_role_extra_modes(role_id)
+    modes: list[str] = []
+    seen: set[str] = set()
+    for m in [role.mode] + extras:
+        key = m.strip().lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        modes.append(m)
+    return modes
+
+
+async def remove_extra_mode_link(role_id: int, mode_name: str) -> None:
+    """RoleGameMode jadvalidan berilgan (role_id, mode) qatorini olib tashlaydi
+    (masalan rol \"ko'chirilganda\" yangi rejim allaqachon qo'shimcha sifatida
+    bog'langan bo'lsa, endi u ASOSIY bo'lgani uchun dublikat qolmasligi kerak)."""
+    async with async_session() as s:
+        await s.execute(
+            delete(RoleGameMode).where(
+                RoleGameMode.role_id == role_id,
+                func.lower(RoleGameMode.mode) == mode_name.strip().lower(),
+            )
+        )
+        await s.commit()
+
+
+async def add_role_to_mode(role_id: int, mode_name: str) -> bool:
+    """Rolni ESKI rejim(lar)idan chiqarmasdan, YANA bitta (QO'SHIMCHA) rejimga
+    ham bog'laydi -- shu bilan bitta rol bir vaqtning o'zida bir nechta rejimda
+    ishlatilishi mumkin bo'ladi. Agar bu rejim rolning ASOSIY rejimi bo'lsa yoki
+    allaqachon bog'langan bo'lsa, hech narsa o'zgarmaydi (baribir True qaytadi)."""
+    role = await get_role(role_id)
+    if not role:
+        return False
+    mode_key = mode_name.strip().lower()
+    if role.mode.strip().lower() == mode_key:
+        return True  # allaqachon shu rejim rolning asosiysi
+    async with async_session() as s:
+        res = await s.execute(
+            select(RoleGameMode).where(
+                RoleGameMode.role_id == role_id,
+                func.lower(RoleGameMode.mode) == mode_key,
+            )
+        )
+        if res.scalars().first():
+            return True  # allaqachon bog'langan
+        s.add(RoleGameMode(role_id=role_id, mode=mode_name))
+        await s.commit()
+    return True
+
+
+async def unlink_role_from_mode(role_id: int, mode_name: str) -> str:
+    """Rolni FAQAT berilgan rejimdan chiqaradi (butun rolni o'chirmaydi):
+    - Agar bu rolning QO'SHIMCHA rejimi bo'lsa -- faqat shu bog'lanish o'chadi,
+      rol qolgan barcha rejimlarida FAOL bo'lib qolaveradi.
+    - Agar bu rolning ASOSIY rejimi bo'lsa va boshqa qo'shimcha rejim(lar)i ham
+      bo'lsa -- ulardan biri yangi ASOSIY rejim qilib belgilanadi (rol baribir
+      qolgan rejimlarida FAOL bo'lib qolaveradi).
+    - Agar bu ASOSIY rejim bo'lib, boshqa hech qanday rejimi qolmagan bo'lsa --
+      har bir rol kamida bitta rejimga tegishli bo'lishi shart bo'lgani uchun,
+      rol shunda NOFAOL qilinadi (o'chirilmaydi, ma'lumotlari saqlanadi).
+    Qaytaradi: "unlinked" | "promoted" | "deactivated" | "not_found"
+    """
+    role = await get_role(role_id)
+    if not role:
+        return "not_found"
+
+    mode_key = mode_name.strip().lower()
+    extras = await get_role_extra_modes(role_id)
+
+    if role.mode.strip().lower() != mode_key:
+        # bu QO'SHIMCHA rejim edi -- faqat bog'lanishni o'chiramiz
+        async with async_session() as s:
+            await s.execute(
+                delete(RoleGameMode).where(
+                    RoleGameMode.role_id == role_id,
+                    func.lower(RoleGameMode.mode) == mode_key,
+                )
+            )
+            await s.commit()
+        return "unlinked"
+
+    # bu rolning ASOSIY rejimi edi -- boshqa qo'shimcha rejimi bormi?
+    other = next((m for m in extras if m.strip().lower() != mode_key), None)
+    if other:
+        async with async_session() as s:
+            r = await s.get(Role, role_id)
+            r.mode = other
+            await s.execute(
+                delete(RoleGameMode).where(
+                    RoleGameMode.role_id == role_id,
+                    func.lower(RoleGameMode.mode) == other.strip().lower(),
+                )
+            )
+            await s.commit()
+        return "promoted"
+
+    # boshqa hech qanday rejimi qolmadi -- butunlay nofaollashtiramiz
+    await update_role(role_id, is_active=False)
+    return "deactivated"
 
 
 async def create_role(**kwargs) -> Role:
@@ -460,6 +585,8 @@ async def delete_role(role_id: int) -> str:
         await s.execute(
             update(Role).where(Role.succeeds_role_id == role_id).values(succeeds_role_id=None)
         )
+        # Rolning qo'shimcha rejim bog'lanishlarini ham tozalaymiz.
+        await s.execute(delete(RoleGameMode).where(RoleGameMode.role_id == role_id))
         await s.execute(delete(Role).where(Role.id == role_id))
         await s.commit()
     return "deleted"

@@ -566,6 +566,26 @@ TEXTS: dict[str, dict[str, str]] = {
         "ru": "🔫 На {victim} напали ночью, но он(а) отбился(ась) ружьём! Нападавший {attacker_role} {attacker} погиб.",
         "en": "🔫 {victim} was attacked at night but fought back with a gun! The attacker {attacker_role} {attacker} died instead.",
     },
+    "mine_saved_you": {
+        "uz": "🧨 Bu tun sizga hujum qilishdi, lekin uyingizga qo'yilgan mina hujumchini portlatib yubordi!",
+        "ru": "🧨 Этой ночью на вас напали, но мина у вашего дома взорвала нападавшего!",
+        "en": "🧨 You were attacked tonight, but a mine planted at your house blew up the attacker instead!",
+    },
+    "mine_triggered_notice": {
+        "uz": "🧨 Portladi! Kimdir {name} ni o'ldirishga urindi va sizning minangizga tushib halok bo'ldi.",
+        "ru": "🧨 Взрыв! Кто-то попытался убить {name} и подорвался на вашей мине.",
+        "en": "🧨 Boom! Someone tried to kill {name} and was blown up by your mine.",
+    },
+    "mine_no_trigger": {
+        "uz": "🧨 Bu tun {name} ga hech kim hujum qilmadi — mina portlamadi.",
+        "ru": "🧨 Этой ночью никто не напал на {name} — мина не сработала.",
+        "en": "🧨 No one attacked {name} tonight — the mine did not go off.",
+    },
+    "mine_killed_attacker": {
+        "uz": "🧨 {victim} tunda hujumga uchradi, lekin uning uyi minalangan ekan! Hujumchi {attacker_role} {attacker} portlashdan halok bo'ldi.",
+        "ru": "🧨 На {victim} напали ночью, но у дома оказалась мина! Нападавший {attacker_role} {attacker} погиб от взрыва.",
+        "en": "🧨 {victim} was attacked at night, but their house was mined! The attacker {attacker_role} {attacker} died in the blast.",
+    },
     "investigation_hidden": {
         "uz": "aniqlab bo'lmadi (himoyalangan).",
         "ru": "не удалось определить (под защитой).",

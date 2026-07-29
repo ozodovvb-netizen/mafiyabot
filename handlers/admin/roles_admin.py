@@ -620,6 +620,31 @@ async def adm_role_dual(callback: CallbackQuery, state: FSMContext):
         await state.clear()
         return
     await state.update_data(dual_check_or_kill=callback.data.endswith(":1"))
+    await state.set_state(AdminRole.waiting_wins_lynched)
+
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    builder = InlineKeyboardBuilder()
+    builder.button(text="✅ Ha", callback_data="role_wl:1")
+    builder.button(text="❌ Yo'q", callback_data="role_wl:0")
+    builder.button(text="↩️ Bekor qilish", callback_data="adm:roles")
+    builder.adjust(2, 1)
+    await callback.message.edit_text(
+        "🃏 Bu rol FAQAT kunduzi ovoz berish orqali OSILSA (lynch qilinsa) g'olib "
+        "hisoblanadimi (masalan Masxaraboz/Jester - jamoasi yoki tirik qolishiga "
+        "bog'liq emas, faqat osilsa yutadi, aks holda yutqazadi)? Odatda bu turdagi "
+        "rol tunda hech narsa qilolmaydi (\"Tungi harakat\" bosqichida \"Yo'q\" tanlang):",
+        reply_markup=builder.as_markup(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(AdminRole.waiting_wins_lynched, F.data.startswith("role_wl:"))
+async def adm_role_wins_lynched(callback: CallbackQuery, state: FSMContext):
+    if not await is_user_admin(callback.from_user.id):
+        await callback.answer()
+        await state.clear()
+        return
+    await state.update_data(wins_when_lynched=callback.data.endswith(":1"))
     await state.set_state(AdminRole.waiting_succeeds)
 
     roles = await crud.get_roles(active_only=False)
@@ -813,6 +838,7 @@ async def adm_role_price(message: Message, state: FSMContext):
         night_money_amount=data.get("night_money_amount", 0),
         day_money_target=data.get("day_money_target"),
         day_money_amount=data.get("day_money_amount", 0),
+        wins_when_lynched=data.get("wins_when_lynched", False),
         price_diamond=int(message.text.strip()),
     )
     await state.clear()
