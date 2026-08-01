@@ -89,7 +89,7 @@ MIN_PLAYERS = int(os.getenv("MIN_PLAYERS", "5"))
 MAX_PLAYERS = int(os.getenv("MAX_PLAYERS", "45"))
 
 REGISTRATION_SECONDS = int(os.getenv("REGISTRATION_SECONDS", "90"))
-NIGHT_SECONDS = int(os.getenv("NIGHT_SECONDS", "40"))
+NIGHT_SECONDS = int(os.getenv("NIGHT_SECONDS", "45"))
 DAY_DISCUSSION_SECONDS = int(os.getenv("DAY_DISCUSSION_SECONDS", "60"))
 VOTING_SECONDS = int(os.getenv("VOTING_SECONDS", "30"))
 LAST_WORDS_SECONDS = int(os.getenv("LAST_WORDS_SECONDS", "30"))
